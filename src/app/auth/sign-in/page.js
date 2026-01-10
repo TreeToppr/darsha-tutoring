@@ -11,6 +11,15 @@ export default function SignInPage() {
     const [message, setMessage] = useState("");
     const router = useRouter();
 
+    const signInWithGoogle = async () => {
+        await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: `${window.location.origin}/auth/callback`,
+            },
+        });
+    };
+
     const handleSignIn = async (e) => {
         e.preventDefault();
         setLoading(true);

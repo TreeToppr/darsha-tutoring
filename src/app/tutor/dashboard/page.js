@@ -11,7 +11,7 @@ export default function TutorDashboard() {
     const [tutorRecord, setTutorRecord] = useState(null);
     const [message, setMessage] = useState("");
     const [bookings, setBookings] = useState([]);
-    //~ const [updatingId, setUpdatingId] = useState("");
+    const [updatingId, setUpdatingId] = useState(null);
 
     const loadBookings = async (tId) => {
         const { data, error } = await supabase

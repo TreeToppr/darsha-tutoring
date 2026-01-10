@@ -137,12 +137,22 @@ export default function BookPage() {
         if (tutorError || !tutor) return [];
 
         // date override: explicitly available
+        // date override: explicitly available (extra openings)
         const { data: dateAvail } = await supabase
             .from("tutor_date_overrides")
             .select("start_time, end_time")
             .eq("tutor_id", tutor.id)
             .eq("date", selectedDate)
             .eq("is_available", true);
+
+        // date override: explicitly NOT available (busy blocks)
+        const { data: dateBusy } = await supabase
+            .from("tutor_date_overrides")
+            .select("start_time, end_time")
+            .eq("tutor_id", tutor.id)
+            .eq("date", selectedDate)
+            .eq("is_available", false);
+
 
         // weekly availability
         const dow = getDayOfWeekFromISODate(selectedDate);
@@ -172,6 +182,17 @@ export default function BookPage() {
             const ws = timeToMinutes(String(tutor.default_window_start).slice(0, 5));
             const we = timeToMinutes(String(tutor.default_window_end).slice(0, 5));
             generated = generateSlots(ws, we);
+        }
+
+        // subtract busy overrides (is_available = false)
+        if (dateBusy?.length) {
+            generated = generated.filter((slot) => {
+                return !dateBusy.some((b) => {
+                    const bs = timeToMinutes(String(b.start_time).slice(0, 5));
+                    const be = timeToMinutes(String(b.end_time).slice(0, 5));
+                    return slot.start < be && slot.end > bs;
+                });
+            });
         }
 
         // existing bookings
