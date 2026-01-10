@@ -11,6 +11,7 @@ export default function ParentDashboard() {
     const [bookings, setBookings] = useState([]);
     const [message, setMessage] = useState("");
     const [updatingId, setUpdatingId] = useState("");
+    const [userId, setUserId] = useState(null);
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -79,11 +80,37 @@ export default function ParentDashboard() {
             }
 
             await loadBookings(user.id);
+            setUserId(user.id);
             setChecking(false);
         };
 
         checkAuth();
     }, [router]);
+
+    useEffect(() => {
+        if (!userId) return;
+
+        const channel = supabase
+            .channel("bookings-parent-dashboard")
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "bookings",
+                    filter: `parent_id=eq.${userId}`,
+                },
+                () => {
+                    loadBookings(userId);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [userId]);
+
 
     if (checking) return <p style={{ padding: 32 }}>Checking access...</p>;
 
