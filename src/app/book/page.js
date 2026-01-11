@@ -30,9 +30,15 @@ function formatISO(iso) {
     return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); // e.g. "Mon 5 Jan"
 }
 
-function buildPaymentCopyText({ studentName, sessionDate }) {
+function buildPaymentCopyText({ studentName, sessionDate, amountTotal, lessonMode }) {
     const ref = `${studentName || "Student"} ${sessionDate || ""}`.trim();
+    const modeLabel = lessonMode === "in_person" ? "In person" : "Online";
+    const amountLine = typeof amountTotal === "number" ? `Amount: $${amountTotal}\n` : "";
+
     return (
+        "Booking payment details:\n" +
+        `Mode: ${modeLabel}\n` +
+        amountLine +
         "Bank transfer details:\n" +
         "Account: 00-0000-0000000-00\n" +
         `Reference: ${ref}\n\n` +
@@ -115,7 +121,7 @@ export default function BookPage() {
     const [message, setMessage] = useState("");
     // Payment info popup after booking request
     const [paymentPopup, setPaymentPopup] = useState(null);
-    // shape: { studentName, sessionDate, paymentStatus, paymentMethod }
+    // shape: { studentName, sessionDate, paymentStatus, paymentMethod, lessonMode, amountTotal, amountBase, amountTravel }
     const [students, setStudents] = useState([]);
     const [selectedStudentId, setSelectedStudentId] = useState("");
     const [requestingKey, setRequestingKey] = useState("");
@@ -421,11 +427,17 @@ export default function BookPage() {
 
         const holidaySet = new Set((holidays || []).map((h) => h.date));
 
+
         for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 7)) {
             const iso = dt.toISOString().split("T")[0];
 
             // skip public holidays automatically
             if (holidaySet.has(iso)) continue;
+
+            const st = students.find((s) => s.id === selectedStudentId) || null;
+            const base = calcBasePrice(st?.year_level ?? 7);
+            const travel = lessonMode === "in_person" ? (priceQuote?.travel ?? 0) : 0;
+            const total = lessonMode === "in_person" ? (priceQuote?.total ?? base) : base;
 
             bookingsToInsert.push({
                 tutor_id: tutor.id,
@@ -434,11 +446,17 @@ export default function BookPage() {
                 session_date: iso,
                 start_time: minutesToTime(slot.start),
                 end_time: minutesToTime(slot.end),
-                // session_type: lessonMode === "in_person" ? "in_person" : "online",
+
                 lesson_mode: lessonMode === "in_person" ? "in_person" : "online",
                 booking_address_text: lessonMode === "in_person" ? (bookingAddress || "").trim() : null,
+
                 payment_status: "unpaid",
                 payment_method: "bank_transfer",
+
+                amount_base: base,
+                amount_travel: travel,
+                amount_total: total,
+
                 status: "requested",
                 notes: modalNotes || null,
                 is_recurring: true,
@@ -462,11 +480,20 @@ export default function BookPage() {
 
         const studentName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
 
+        const st = students.find((s) => s.id === selectedStudentId) || null;
+        const base = calcBasePrice(st?.year_level ?? 7);
+        const travel = lessonMode === "in_person" ? (priceQuote?.travel ?? 0) : 0;
+        const total = lessonMode === "in_person" ? (priceQuote?.total ?? base) : base;
+
         setPaymentPopup({
             studentName,
             sessionDate,
             paymentStatus: "unpaid",
             paymentMethod: "bank_transfer",
+            lessonMode,
+            amountBase: base,
+            amountTravel: travel,
+            amountTotal: total,
         });
 
         setMessage("Recurring booking requested for the term. The tutor will confirm.");
@@ -532,6 +559,12 @@ export default function BookPage() {
             }
         }
 
+        // Compute amounts BEFORE inserting
+        const st = students.find((s) => s.id === selectedStudentId) || null;
+        const base = calcBasePrice(st?.year_level ?? 7);
+        const travel = lessonMode === "in_person" ? (priceQuote?.travel ?? 0) : 0;
+        const total = lessonMode === "in_person" ? (priceQuote?.total ?? base) : base;
+
         const { error } = await supabase.from("bookings").insert({
             tutor_id: tutor.id,
             parent_id: user.id,
@@ -540,9 +573,7 @@ export default function BookPage() {
             start_time: minutesToTime(slot.start),
             end_time: minutesToTime(slot.end),
 
-            // session_type: lessonMode, 
             lesson_mode: lessonMode === "in_person" ? "in_person" : "online",
-            // "online" | "in_person"
             booking_address_text: lessonMode === "in_person" ? (bookingAddress || "").trim() : null,
 
             status: "requested",
@@ -551,8 +582,11 @@ export default function BookPage() {
 
             payment_status: "unpaid",
             payment_method: "bank_transfer",
-        }
-        );
+
+            amount_base: base,
+            amount_travel: travel,
+            amount_total: total,
+        });
 
         if (error) {
             setMessage(error.message);
@@ -568,6 +602,10 @@ export default function BookPage() {
             sessionDate,
             paymentStatus: "unpaid",
             paymentMethod: "bank_transfer",
+            lessonMode,
+            amountBase: base,
+            amountTravel: travel,
+            amountTotal: total,
         });
 
         setMessage("Booking requested."); // keep message short (or set to "" if you prefer)
@@ -750,6 +788,18 @@ export default function BookPage() {
                             </span>
                         </div>
 
+                        {typeof paymentPopup.amountTotal === "number" && (
+                            <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
+                                <div style={{ fontWeight: 900 }}>Total to pay</div>
+                                <div style={{ marginTop: 6, fontSize: 16, fontWeight: 900 }}>${paymentPopup.amountTotal}</div>
+
+                                <div style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
+                                    ${paymentPopup.amountBase} (base)
+                                    {paymentPopup.lessonMode === "in_person" ? ` + $${paymentPopup.amountTravel} (travel)` : ""}
+                                </div>
+                            </div>
+                        )}
+
                         <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fafafa" }}>
                             <div style={{ fontWeight: 900 }}>Bank transfer</div>
                             <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "120px 1fr", rowGap: 6, columnGap: 10, fontSize: 14 }}>
@@ -843,6 +893,95 @@ export default function BookPage() {
                             <h3 style={{ marginTop: 0 }}>
                                 Book {formatISO(selectedCell.date)} | {minutesToTime(selectedCell.start)} – {minutesToTime(selectedCell.start + modalDuration)}
                             </h3>
+
+                            {/* Student selector (inside booking popup) */}
+                            <div style={{ marginTop: 10 }}>
+                                <div style={{ fontWeight: 900, marginBottom: 8 }}>Student</div>
+
+                                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                    {students.map((s) => {
+                                        const selected = selectedStudentId === s.id;
+                                        const initials =
+                                            (s.full_name || "")
+                                                .trim()
+                                                .split(/\s+/)
+                                                .slice(0, 2)
+                                                .map((p) => (p[0] || "").toUpperCase())
+                                                .join("") || "?";
+
+                                        return (
+                                            <button
+                                                key={s.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedStudentId(s.id);
+                                                    // switching student can change base price
+                                                    setDriveMinutes(null);
+                                                    setPriceQuote(null);
+                                                    setPricingError("");
+                                                }}
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: 10,
+                                                    padding: "10px 12px",
+                                                    borderRadius: 12,
+                                                    border: selected ? "2px solid #1f7aea" : "1px solid #ddd",
+                                                    background: selected ? "#f3f7ff" : "#fff",
+                                                    cursor: "pointer",
+                                                    fontWeight: 900,
+                                                }}
+                                                aria-pressed={selected}
+                                            >
+                                                <div
+                                                    style={{
+                                                        width: 32,
+                                                        height: 32,
+                                                        borderRadius: 999,
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                        background: selected ? "#1f7aea" : "#e9eefc",
+                                                        color: selected ? "#fff" : "#1f7aea",
+                                                        fontWeight: 900,
+                                                        fontSize: 13,
+                                                        flex: "0 0 auto",
+                                                    }}
+                                                >
+                                                    {initials}
+                                                </div>
+
+                                                <div style={{ textAlign: "left" }}>
+                                                    <div style={{ lineHeight: 1.1 }}>{s.full_name}</div>
+                                                    {typeof s.year_level !== "undefined" && s.year_level !== null && (
+                                                        <div style={{ marginTop: 4, fontSize: 12, color: "#666", fontWeight: 800 }}>
+                                                            Year {s.year_level}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+
+                                    <a
+                                        href="/parent/students"
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: 8,
+                                            padding: "10px 12px",
+                                            borderRadius: 12,
+                                            border: "1px dashed #bbb",
+                                            background: "#fff",
+                                            color: "#1f7aea",
+                                            fontWeight: 900,
+                                            textDecoration: "none",
+                                        }}
+                                    >
+                                        + Add student
+                                    </a>
+                                </div>
+                            </div>
 
                             <div style={{ marginTop: 8 }}>
                                 <label style={{ display: "block", marginBottom: 6 }}>Duration</label>
@@ -1028,10 +1167,16 @@ export default function BookPage() {
 
                                 <button
                                     onClick={async () => {
+                                        if (!selectedStudentId) {
+                                            setMessage("Please select a student before confirming.");
+                                            return;
+                                        }
+
                                         if (lessonMode === "in_person" && !priceQuote) {
                                             setMessage("Please calculate the price before confirming an in-person booking.");
                                             return;
                                         }
+
                                         const slot = {
                                             start: selectedCell.start,
                                             end: selectedCell.start + modalDuration,
@@ -1185,8 +1330,13 @@ export default function BookPage() {
                 </div>
 
                 {students.length > 0 && (
-                    <div style={{ marginTop: 12, overflowX: "auto", position: "relative" }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "80px repeat(7,1fr)", gap: 1, border: "1px solid #eee" }}>
+                    <div className="gridScroll" style={{ marginTop: 12, position: "relative" }}>
+                        <div className="gridInner" style={{
+                            display: "grid",
+                            gridTemplateColumns: "80px repeat(7,1fr)",
+                            gap: 1,
+                            border: "1px solid #eee"
+                        }}>
                             <div style={{ padding: 8, background: "#fafafa" }} />
 
                             {weekDays.map((d) => (

@@ -17,10 +17,21 @@ const statusLabel = (s) => {
 };
 
 const statusStyle = (s) => {
-    const base = { padding: "2px 8px", borderRadius: 999, fontSize: 12, fontWeight: 700, border: "1px solid #ddd" };
+    const base = {
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 700,
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: "#ddd",
+        background: "#fff",
+    };
+
     if (s === "accepted") return { ...base, background: "#e9f7ef", borderColor: "#b7e1c5" };
     if (s === "requested") return { ...base, background: "#fff7e6", borderColor: "#ffe0a3" };
-    if (s === "cancelled") return { ...base, background: "#f5f5f5" };
+    if (s === "cancelled") return { ...base, background: "#f5f5f5", borderColor: "#e0e0e0" };
+
     return base;
 };
 
@@ -77,21 +88,45 @@ const completedStyle = {
     borderRadius: 999,
     fontSize: 12,
     fontWeight: 900,
-    border: "1px solid #e0e0e0",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#e0e0e0",
     background: "#f5f5f5",
     color: "#555",
 };
 
 const paymentStyle = (p) => {
-    const base = { padding: "2px 8px", borderRadius: 999, fontSize: 12, fontWeight: 800, border: "1px solid #ddd" };
+    const base = {
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 800,
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: "#ddd",
+        background: "#fff",
+        color: "#111",
+    };
+
     if (p === "paid") return { ...base, background: "#e9f7ef", borderColor: "#b7e1c5", color: "#1b5e20" };
-    return { ...base, background: "#fff7e6", borderColor: "#ffe0a3", color: "#8a5a00" }; // unpaid default
+    return { ...base, background: "#fff7e6", borderColor: "#ffe0a3", color: "#8a5a00" };
 };
 
 const modeStyle = (m) => {
-    const base = { padding: "2px 8px", borderRadius: 999, fontSize: 12, fontWeight: 800, border: "1px solid #ddd" };
+    const base = {
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 800,
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: "#ddd",
+        background: "#fff",
+        color: "#111",
+    };
+
     if (m === "in_person") return { ...base, background: "#f5f5f5", borderColor: "#e0e0e0", color: "#333" };
-    return { ...base, background: "#e9eefc", borderColor: "#cdd9ff", color: "#1f7aea" }; // online default
+    return { ...base, background: "#e9eefc", borderColor: "#cdd9ff", color: "#1f7aea" };
 };
 
 export default function ParentDashboard() {
@@ -102,7 +137,9 @@ export default function ParentDashboard() {
     const [updatingId, setUpdatingId] = useState("");
     const [userId, setUserId] = useState(null);
     const [profile, setProfile] = useState(null);
+    const [cancelModal, setCancelModal] = useState(null);
     const [students, setStudents] = useState([]);
+    // { booking, scope: "single" | "series", confirmText: "" }
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -112,7 +149,7 @@ export default function ParentDashboard() {
     const loadBookings = async (userId) => {
         const { data, error } = await supabase
             .from("bookings")
-            .select("id, session_date, start_time, end_time, status, payment_status, lesson_mode, student_id, students(full_name)")
+            .select("id, session_date, start_time, end_time, status, payment_status, lesson_mode, student_id, is_recurring, recurring_group_id, students(full_name)")
             .eq("parent_id", userId)
             .order("session_date", { ascending: true })
             .order("start_time", { ascending: true });
@@ -142,26 +179,61 @@ export default function ParentDashboard() {
         setStudents(data || []);
     };
 
-    const handleCancelBooking = async (bookingId) => {
+    const handleCancelBooking = async (booking, scope) => {
         setMessage("");
-        setUpdatingId(bookingId);
+        setUpdatingId(booking.id);
 
-        const { error } = await supabase
-            .from("bookings")
-            .update({ status: "cancelled" })
-            .eq("id", bookingId);
+        try {
+            if (scope === "series") {
+                // Cancel this booking + all future bookings in the same recurring group
+                const groupId = booking.recurring_group_id;
+                if (!groupId) {
+                    setMessage("This booking isn't linked to a recurring group.");
+                    setUpdatingId("");
+                    return;
+                }
 
-        if (error) {
-            setMessage(error.message);
+                // Cancel bookings in the same group from today onwards
+                // (We compare by session_date; simple + robust enough for now)
+                const { error: bookingsError } = await supabase
+                    .from("bookings")
+                    .update({ status: "cancelled" })
+                    .eq("recurring_group_id", groupId)
+                    .gte("session_date", booking.session_date);
+
+                if (bookingsError) {
+                    setMessage(bookingsError.message);
+                    setUpdatingId("");
+                    return;
+                }
+
+                // Optional: also mark the recurring group itself cancelled (prevents future generation if you use it)
+                const { error: groupError } = await supabase
+                    .from("recurring_groups")
+                    .update({ status: "cancelled" })
+                    .eq("id", groupId);
+
+                // If recurring_groups isn't used or policy blocks it, don't fail the whole action
+                if (groupError) console.log("recurring_groups update warning:", groupError.message);
+            } else {
+                // Cancel only this booking
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ status: "cancelled" })
+                    .eq("id", booking.id);
+
+                if (error) {
+                    setMessage(error.message);
+                    setUpdatingId("");
+                    return;
+                }
+            }
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) await Promise.all([loadBookings(user.id), loadStudents(user.id)]);
+        } finally {
             setUpdatingId("");
-            return;
         }
-
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
-        if (user) await Promise.all([loadBookings(user.id), loadStudents(user.id)]);
-        setUpdatingId("");
     };
 
     useEffect(() => {
@@ -225,15 +297,60 @@ export default function ParentDashboard() {
 
     const nowKey = getNowAucklandKey();
 
-    const upcomingBookings = (bookings || []).filter((b) => bookingStartKey(b) >= nowKey);
-    const completedBookings = (bookings || []).filter((b) => bookingStartKey(b) < nowKey);
+    const deletedBookings = (bookings || []).filter((b) => (b.status || "") === "cancelled");
+
+    // Upcoming/completed should exclude cancelled ones
+    const upcomingBookings = (bookings || []).filter((b) => bookingStartKey(b) >= nowKey && (b.status || "") !== "cancelled");
+    const completedBookings = (bookings || []).filter((b) => bookingStartKey(b) < nowKey && (b.status || "") !== "cancelled");
+
+    const unpaidUpcoming = upcomingBookings.filter((b) => (b.payment_status || "unpaid") !== "paid");
+    const requestedUpcoming = upcomingBookings.filter((b) => (b.status || "") === "requested");
+
 
     return (
         <div style={{ padding: 24, background: "#fafafa", minHeight: "100vh" }}>
-            <div style={{ maxWidth: 980, margin: "0 auto" }}>
+            <style>{`
+                .pageWrap { max-width: 980px; margin: 0 auto; }
+
+                /* Hide mobile bar by default (desktop/tablet) */
+                .mobileBar { display: none; }
+                .mobileBarSpacer { display: none; }
+
+                @media (max-width: 640px) {
+                    .pageWrap { padding: 0 8px; }
+                    .topRow { flex-direction: column; align-items: stretch !important; gap: 10px !important; }
+                    .topActions { justify-content: flex-start !important; flex-wrap: wrap !important; gap: 10px !important; }
+                    .profileCard { grid-template-columns: 1fr !important; }
+                    .profileRight { justify-content: flex-start !important; }
+                    .bookingCard { min-width: 0 !important; width: 100% !important; }
+
+                    .mobileBar {
+                        display: block;
+                        position: fixed;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: rgba(250,250,250,0.95);
+                        backdrop-filter: blur(10px);
+                        border-top: 1px solid #eee;
+                        padding: 10px 12px;
+                        z-index: 9999;
+                    }                   
+
+                    .mobileBarSpacer {
+                        display: block;
+                        height: 72px;
+                    }
+
+                    .statsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+                    @media (max-width: 640px) { .statsGrid { grid-template-columns: 1fr; } }
+                }
+            `}</style>
+
+            <div className="pageWrap">
                 {/* everything else stays inside here */}
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <div className="topRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                     <div>
                         <h1 style={{ margin: 0 }}>
                             Welcome {profile?.full_name ? profile.full_name.split(" ")[0] : "back"}!
@@ -242,7 +359,7 @@ export default function ParentDashboard() {
                         <p style={{ margin: "6px 0 0", color: "#555" }}>Manage students and bookings.</p>
                     </div>
 
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <div className="topActions" style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <Link
                             href="/book"
                             style={{
@@ -260,6 +377,37 @@ export default function ParentDashboard() {
                         {/* <button onClick={handleSignOut} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd" }}>
                             Sign out
                         </button> */}
+                    </div>
+                </div>
+
+                {/* Quick stats */}
+                <div
+                    style={{
+                        marginTop: 14,
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: 12,
+                    }}
+                >
+                    {/* <div className="statsGrid"> */}
+                    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
+                        <div style={{ color: "#666", fontWeight: 800, fontSize: 12 }}>Students</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{students.length}</div>
+                        <div style={{ color: "#777", fontSize: 12, marginTop: 2 }}>Manage them anytime</div>
+                    </div>
+
+                    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
+                        <div style={{ color: "#666", fontWeight: 800, fontSize: 12 }}>Upcoming</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{upcomingBookings.length}</div>
+                        <div style={{ color: "#777", fontSize: 12, marginTop: 2 }}>
+                            {requestedUpcoming.length ? `${requestedUpcoming.length} lessons awaiting approval` : "All up to date"}
+                        </div>
+                    </div>
+
+                    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
+                        <div style={{ color: "#666", fontWeight: 800, fontSize: 12 }}>Unpaid</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{unpaidUpcoming.length}</div>
+                        <div style={{ color: "#777", fontSize: 12, marginTop: 2 }}>For upcoming lessons</div>
                     </div>
                 </div>
 
@@ -317,6 +465,7 @@ export default function ParentDashboard() {
 
                 {/* Big profile header (like your mock) */}
                 <div
+                    className="profileCard"
                     style={{
                         marginTop: 16,
                         padding: 18,
@@ -324,7 +473,6 @@ export default function ParentDashboard() {
                         borderRadius: 16,
                         background: "#fff",
                         display: "grid",
-                        gridTemplateColumns: "1fr auto",
                         gap: 16,
                         alignItems: "center",
                     }}
@@ -439,7 +587,7 @@ export default function ParentDashboard() {
                     </div>
 
                     {/* Actions (right side) */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+                    <div className="profileRight" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
                         <Link
                             href="/parent/profile"
                             style={{
@@ -487,9 +635,9 @@ export default function ParentDashboard() {
                 <section style={{ marginTop: 24 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
                         <h2 style={{ margin: 0 }}>My bookings</h2>
-                        <Link href="/parent/students" style={{ color: "#1f7aea", textDecoration: "none", fontWeight: 700 }}>
+                        {/* <Link href="/parent/students" style={{ color: "#1f7aea", textDecoration: "none", fontWeight: 700 }}>
                             Manage students →
-                        </Link>
+                        </Link> */}
                     </div>
 
                     {bookings.length === 0 ? (
@@ -533,21 +681,43 @@ export default function ParentDashboard() {
                                                         flexWrap: "wrap",
                                                     }}
                                                 >
-                                                    <div style={{ minWidth: 240 }}>
-                                                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                                            <span style={{ fontWeight: 900 }}>{formatISO(b.session_date)}</span>
-                                                            <span style={{ color: "#555", fontWeight: 700 }}>{timeRange}</span>
-
-                                                            <span style={statusStyle(b.status)}>{statusLabel(b.status)}</span>
-                                                            <span style={paymentStyle(b.payment_status)}>{(b.payment_status || "unpaid").toUpperCase()}</span>
-
-                                                            <span style={modeStyle(b.lesson_mode)}>
-                                                                {b.lesson_mode === "in_person" ? "IN PERSON" : "ONLINE"}
-                                                            </span>
+                                                    <div style={{ minWidth: 240, display: "flex", gap: 12, alignItems: "flex-start" }}>
+                                                        <div
+                                                            style={{
+                                                                width: 40,
+                                                                height: 40,
+                                                                borderRadius: "50%",
+                                                                background: "#f1f3f5",
+                                                                border: "1px solid #e6e6e6",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "center",
+                                                                fontWeight: 900,
+                                                                color: "#333",
+                                                                flex: "0 0 auto",
+                                                            }}
+                                                            title={studentName}
+                                                        >
+                                                            {(studentName || "S").slice(0, 1).toUpperCase()}
                                                         </div>
 
-                                                        <div style={{ marginTop: 6, color: "#333" }}>
-                                                            <span style={{ color: "#555" }}>Student:</span> <strong>{studentName}</strong>
+                                                        {/* Wrap tags + student line together */}
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ marginTop: 6, color: "#333" }}>
+                                                                <span style={{ color: "#555" }}>Student:</span> <strong>{studentName}</strong>
+                                                            </div>
+                                                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                                                <span style={{ fontWeight: 900 }}>{formatISO(b.session_date)}</span>
+                                                                <span style={{ color: "#555", fontWeight: 700 }}>{timeRange}</span>
+
+                                                                <span style={statusStyle(b.status)}>{statusLabel(b.status)}</span>
+                                                                <span style={paymentStyle(b.payment_status)}>{(b.payment_status || "unpaid").toUpperCase()}</span>
+
+                                                                <span style={modeStyle(b.lesson_mode)}>
+                                                                    {b.lesson_mode === "in_person" ? "IN PERSON" : "ONLINE"}
+                                                                </span>
+                                                            </div>
+
                                                         </div>
                                                     </div>
 
@@ -555,10 +725,16 @@ export default function ParentDashboard() {
                                                         {(b.status === "requested" || b.status === "accepted") && (
                                                             <button
                                                                 disabled={updatingId === b.id}
-                                                                onClick={() => handleCancelBooking(b.id)}
+                                                                onClick={() =>
+                                                                    setCancelModal({
+                                                                        booking: b,
+                                                                        scope: (b.recurring_group_id || b.is_recurring) ? "series" : "single",
+                                                                        confirmText: "",
+                                                                    })
+                                                                }
                                                                 style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd" }}
                                                             >
-                                                                {updatingId === b.id ? "Cancelling..." : "Cancel"}
+                                                                {updatingId === b.id ? "Working..." : "Cancel"}
                                                             </button>
                                                         )}
                                                     </div>
@@ -631,12 +807,267 @@ export default function ParentDashboard() {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Deleted */}
+                            <div>
+                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                                    <h3 style={{ margin: "0 0 10px" }}>Deleted</h3>
+                                    <div style={{ color: "#777", fontWeight: 700, fontSize: 13 }}>{deletedBookings.length} booking(s)</div>
+                                </div>
+
+                                {deletedBookings.length === 0 ? (
+                                    <div style={{ padding: 14, border: "1px solid #eee", borderRadius: 12, background: "#fafafa", color: "#555" }}>
+                                        No deleted bookings.
+                                    </div>
+                                ) : (
+                                    <div style={{ display: "grid", gap: 10 }}>
+                                        {deletedBookings.map((b) => {
+                                            const studentName = b.students?.full_name || "Student";
+                                            const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
+
+                                            return (
+                                                <div
+                                                    key={b.id}
+                                                    style={{
+                                                        border: "1px solid #eee",
+                                                        borderRadius: 12,
+                                                        padding: 14,
+                                                        background: "#fff",
+                                                        display: "flex",
+                                                        justifyContent: "space-between",
+                                                        gap: 12,
+                                                        alignItems: "center",
+                                                        flexWrap: "wrap",
+                                                        opacity: 0.75,
+                                                    }}
+                                                >
+                                                    <div style={{ minWidth: 240 }}>
+                                                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                                            <span style={{ fontWeight: 900 }}>{formatISO(b.session_date)}</span>
+                                                            <span style={{ color: "#555", fontWeight: 700 }}>{timeRange}</span>
+
+                                                            <span style={completedStyle}>DELETED</span>
+
+                                                            <span style={statusStyle(b.status)}>{statusLabel(b.status)}</span>
+                                                            <span style={paymentStyle(b.payment_status)}>{(b.payment_status || "unpaid").toUpperCase()}</span>
+
+                                                            <span style={modeStyle(b.lesson_mode)}>
+                                                                {b.lesson_mode === "in_person" ? "IN PERSON" : "ONLINE"}
+                                                            </span>
+                                                        </div>
+
+                                                        <div style={{ marginTop: 6, color: "#333" }}>
+                                                            <span style={{ color: "#555" }}>Student:</span> <strong>{studentName}</strong>
+                                                        </div>
+                                                    </div>
+
+                                                    <div />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </section>
 
+                {/* Cancel modal */}
+                {cancelModal?.booking && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            left: 0,
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: "rgba(0,0,0,0.35)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            zIndex: 9999,
+                            padding: 16,
+                        }}
+                        onClick={() => setCancelModal(null)}
+                    >
+                        <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                width: "100%",
+                                maxWidth: 520,
+                                background: "#fff",
+                                borderRadius: 16,
+                                padding: 18,
+                                border: "1px solid #eee",
+                                boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                            }}
+                        >
+                            {(() => {
+                                const b = cancelModal.booking;
+                                const studentName = b.students?.full_name || "Student";
+                                const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
+                                const isRecurring = Boolean(b.recurring_group_id || b.is_recurring);
 
-                <p style={{ marginTop: 24, color: "#555" }}>Students, bookings, payments will live here.</p>
+                                return (
+                                    <>
+                                        <h3 style={{ margin: 0 }}>Cancel booking</h3>
+                                        <p style={{ margin: "8px 0 0", color: "#555" }}>
+                                            <strong>{studentName}</strong> • {formatISO(b.session_date)} • {timeRange}
+                                        </p>
+
+                                        <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "#fafafa", border: "1px solid #eee" }}>
+                                            {isRecurring ? (
+                                                <>
+                                                    <div style={{ fontWeight: 900, marginBottom: 8 }}>This is part of a recurring booking.</div>
+                                                    <div style={{ display: "grid", gap: 10 }}>
+                                                        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                                                            <input
+                                                                type="radio"
+                                                                name="cancelScope"
+                                                                checked={cancelModal.scope === "single"}
+                                                                onChange={() => setCancelModal((m) => ({ ...m, scope: "single" }))}
+                                                            />
+                                                            <span>
+                                                                <strong>Cancel this lesson only</strong>
+                                                                <div style={{ color: "#666", fontSize: 13 }}>Only this date gets cancelled.</div>
+                                                            </span>
+                                                        </label>
+
+                                                        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                                                            <input
+                                                                type="radio"
+                                                                name="cancelScope"
+                                                                checked={cancelModal.scope === "series"}
+                                                                onChange={() => setCancelModal((m) => ({ ...m, scope: "series" }))}
+                                                            />
+                                                            <span>
+                                                                <strong>Cancel the rest of the recurring lessons</strong>
+                                                                <div style={{ color: "#666", fontSize: 13 }}>
+                                                                    Cancels this booking and all future bookings in the recurring series.
+                                                                </div>
+                                                            </span>
+                                                        </label>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div style={{ fontWeight: 900, marginBottom: 6 }}>This is a one-off booking.</div>
+                                                    <div style={{ color: "#666", fontSize: 13 }}>Are you sure you want to cancel it?</div>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        <div style={{ marginTop: 14 }}>
+                                            <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
+                                                Type <span style={{ fontFamily: "monospace" }}>CANCEL</span> to confirm
+                                            </label>
+                                            <input
+                                                value={cancelModal.confirmText}
+                                                onChange={(e) => setCancelModal((m) => ({ ...m, confirmText: e.target.value }))}
+                                                placeholder="CANCEL"
+                                                style={{
+                                                    width: "100%",
+                                                    padding: "10px 12px",
+                                                    borderRadius: 12,
+                                                    border: "1px solid #ddd",
+                                                    outline: "none",
+                                                    fontWeight: 800,
+                                                }}
+                                            />
+                                        </div>
+
+                                        <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+                                            <button
+                                                onClick={() => setCancelModal(null)}
+                                                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", background: "#fff", fontWeight: 800 }}
+                                            >
+                                                Back
+                                            </button>
+
+                                            <button
+                                                disabled={cancelModal.confirmText.trim().toUpperCase() !== "CANCEL" || updatingId === b.id}
+                                                onClick={async () => {
+                                                    const scope = cancelModal.scope || "single";
+                                                    setCancelModal(null);
+                                                    await handleCancelBooking(b, scope);
+                                                }}
+                                                style={{
+                                                    padding: "10px 12px",
+                                                    borderRadius: 12,
+                                                    border: "none",
+                                                    background: "#e53935",
+                                                    color: "#fff",
+                                                    fontWeight: 900,
+                                                    opacity: cancelModal.confirmText.trim().toUpperCase() === "CANCEL" ? 1 : 0.6,
+                                                    cursor: cancelModal.confirmText.trim().toUpperCase() === "CANCEL" ? "pointer" : "not-allowed",
+                                                }}
+                                            >
+                                                {updatingId === b.id ? "Cancelling..." : "Confirm cancel"}
+                                            </button>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                )}
+
+                <div className="mobileBarSpacer" />
+
+                {/* Mobile sticky action bar */}
+                <div className="mobileBar">
+                    <div style={{ display: "flex", gap: 10 }}>
+                        <Link
+                            href="/book"
+                            style={{
+                                flex: 1,
+                                background: "#1f7aea",
+                                color: "#fff",
+                                padding: "12px 14px",
+                                borderRadius: 12,
+                                textDecoration: "none",
+                                fontWeight: 900,
+                                textAlign: "center",
+                            }}
+                        >
+                            Book
+                        </Link>
+
+                        <Link
+                            href="/parent/students"
+                            style={{
+                                flex: 1,
+                                border: "1px solid #ddd",
+                                background: "#fff",
+                                color: "#111",
+                                padding: "12px 14px",
+                                borderRadius: 12,
+                                textDecoration: "none",
+                                fontWeight: 900,
+                                textAlign: "center",
+                            }}
+                        >
+                            Students
+                        </Link>
+
+                        <Link
+                            href="/parent/profile"
+                            style={{
+                                flex: 1,
+                                border: "1px solid #ddd",
+                                background: "#fff",
+                                color: "#111",
+                                padding: "12px 14px",
+                                borderRadius: 12,
+                                textDecoration: "none",
+                                fontWeight: 900,
+                                textAlign: "center",
+                            }}
+                        >
+                            Profile
+                        </Link>
+                    </div>
+                </div>
             </div>
         </div>
     );

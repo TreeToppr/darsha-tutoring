@@ -534,436 +534,444 @@ export default function TutorAvailabilityPage() {
                 {loadingWeek && <span style={{ marginLeft: 8, color: "#555" }}>Loading…</span>}
             </div>
 
-            <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, overflow: "hidden" }}>
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "80px repeat(7, 1fr)",
-                        background: "#fafafa",
-                        borderBottom: "1px solid #eee",
-                    }}
-                >
-                    <div />
-                    {weekDays.map((d) => (
+            <div className="gridScroll" style={{ marginTop: 12 }}>
+                <section style={{ borderRadius: 12, overflow: "hidden" }}>
+                    <div className="gridInner">
                         <div
-                            key={d.iso}
                             style={{
-                                padding: 10,
-                                textAlign: "center",
-                                fontWeight: 800,
-                                opacity: d.iso <= aucklandDate ? 0.45 : 1,
+                                display: "grid",
+                                gridTemplateColumns: "80px repeat(7, 1fr)",
+                                background: "#fafafa",
+                                borderBottom: "1px solid #eee",
                             }}
-                            title={d.iso <= aucklandDate ? "Past day (not editable)" : ""}
                         >
-                            {d.short}
-                        </div>
-                    ))}
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "80px repeat(7, 1fr)" }}>
-                    {hours.map((h) => {
-                        const start00 = h * 60;
-                        const start30 = start00 + 30;
-
-                        return (
-                            <div key={h} style={{ display: "contents" }}>
-                                <div style={{ padding: 10, textAlign: "right", background: "#fff", fontWeight: 800 }}>
-                                    {String(h).padStart(2, "0")}
+                            <div />
+                            {weekDays.map((d) => (
+                                <div
+                                    key={d.iso}
+                                    style={{
+                                        padding: 10,
+                                        textAlign: "center",
+                                        fontWeight: 800,
+                                        opacity: d.iso <= aucklandDate ? 0.45 : 1,
+                                    }}
+                                    title={d.iso <= aucklandDate ? "Past day (not editable)" : ""}
+                                >
+                                    {d.short}
                                 </div>
+                            ))}
+                        </div>
 
-                                {weekDays.map((d) => {
-                                    const past = d.iso <= aucklandDate;
+                        <div style={{ display: "grid", gridTemplateColumns: "80px repeat(7, 1fr)" }}>
+                            {hours.map((h) => {
+                                const start00 = h * 60;
+                                const start30 = start00 + 30;
 
-                                    const busy00 = isBusy(d.iso, start00, start00 + 30);
-                                    const busy30 = isBusy(d.iso, start30, start30 + 30);
-
-                                    const block00 = findBusyBlockAt(d.iso, start00, start00 + 30);
-                                    const block30 = findBusyBlockAt(d.iso, start30, start30 + 30);
-
-
-                                    const hasNote00 = Boolean(block00?.note && String(block00.note).trim());
-                                    const hasNote30 = Boolean(block30?.note && String(block30.note).trim());
-
-
-                                    const highlight00 =
-                                        hoveredCell?.date === d.iso &&
-                                        (hoveredCell?.slotStart === start00 || hoveredCell?.slotStart + 30 === start00);
-
-                                    const highlight30 =
-                                        hoveredCell?.date === d.iso &&
-                                        (hoveredCell?.slotStart === start30 || hoveredCell?.slotStart + 30 === start30);
-
-                                    return (
-                                        <div key={`${d.iso}-${h}`} style={{ borderLeft: "1px solid #eee", borderTop: "1px solid #eee" }}>
-                                            <div
-                                                onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
-                                                onMouseEnter={() => {
-                                                    if (loadingWeek) return;
-                                                    setHoveredCell({ date: d.iso, slotStart: start00 });
-                                                    setHoverPreview({
-                                                        date: d.iso,
-                                                        start: start00,
-                                                        end: start00 + 30,
-                                                        note: block00?.note || null,
-                                                    });
-                                                }}
-                                                onMouseLeave={() => {
-                                                    setHoveredCell(null);
-                                                    setHoverPreview(null);
-                                                }}
-                                                onClick={() => {
-                                                    if (loadingWeek) return;
-                                                    if (past) return;
-
-                                                    const slotStart = start00;
-                                                    const slotEnd = start00 + 60;
-                                                    const block = findBusyBlockAt(d.iso, slotStart, slotEnd);
-
-                                                    if (block) openEditModal({ ...block, date: d.iso });
-                                                    else openCreateModal(d.iso, slotStart);
-                                                }}
-                                                style={{
-                                                    height: 22,
-                                                    borderBottom: "1px dashed #f0f0f0",
-                                                    cursor: past ? "not-allowed" : "pointer",
-                                                    background: busy00 ? "#f5f5f5" : "#fff",
-                                                    opacity: past ? 0.5 : 1,
-                                                    outline:
-                                                        hoveredCell?.date === d.iso &&
-                                                            (hoveredCell?.slotStart === start00 || hoveredCell?.slotStart + 30 === start00)
-                                                            ? "2px solid #1f7aea"
-                                                            : "none",
-                                                    outlineOffset: -2,
-
-                                                    // important for inline text
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                    padding: "0 4px",
-                                                    fontSize: 11,
-                                                    color: "#444",
-                                                    overflow: "hidden",
-                                                    whiteSpace: "nowrap",
-                                                    textOverflow: "ellipsis",
-                                                }}
-                                                title={
-                                                    past
-                                                        ? "Past day"
-                                                        : `${minutesToTime(start00)} - ${minutesToTime(start00 + 30)}${block00?.note ? ` | ${displayNote(block00.note)}` : ""
-                                                        }`
-                                                }
-                                            >
-                                                {busy00 && block00?.note ? shortNote(block00.note) : null}
-                                            </div>
-
-                                            <div
-                                                onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
-                                                onMouseEnter={() => {
-                                                    if (loadingWeek) return;
-                                                    setHoveredCell({ date: d.iso, slotStart: start30 });
-                                                    setHoverPreview({
-                                                        date: d.iso,
-                                                        start: start30,
-                                                        end: start30 + 30,
-                                                        note: block30?.note || null,
-                                                    });
-                                                }}
-                                                onMouseLeave={() => {
-                                                    setHoveredCell(null);
-                                                    setHoverPreview(null);
-                                                }}
-                                                onClick={() => {
-                                                    if (loadingWeek) return;
-                                                    if (past) return;
-
-                                                    const slotStart = start30;
-                                                    const slotEnd = start30 + 60;
-                                                    const block = findBusyBlockAt(d.iso, slotStart, slotEnd);
-
-                                                    if (block) openEditModal({ ...block, date: d.iso });
-                                                    else openCreateModal(d.iso, slotStart);
-                                                }}
-                                                style={{
-                                                    height: 22,
-                                                    cursor: past ? "not-allowed" : "pointer",
-                                                    background: busy30 ? "#f5f5f5" : "#fff",
-                                                    opacity: past ? 0.5 : 1,
-                                                    outline:
-                                                        hoveredCell?.date === d.iso &&
-                                                            (hoveredCell?.slotStart === start30 || hoveredCell?.slotStart + 30 === start30)
-                                                            ? "2px solid #1f7aea"
-                                                            : "none",
-                                                    outlineOffset: -2,
-
-                                                    // important for inline text
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                    padding: "0 4px",
-                                                    fontSize: 11,
-                                                    color: "#444",
-                                                    overflow: "hidden",
-                                                    whiteSpace: "nowrap",
-                                                    textOverflow: "ellipsis",
-                                                }}
-                                                title={
-                                                    past
-                                                        ? "Past day"
-                                                        : `${minutesToTime(start30)} - ${minutesToTime(start30 + 60)}${block30?.note ? ` | ${displayNote(block30.note)}` : ""
-                                                        }`
-                                                }
-                                            >
-                                                {busy30 && block30?.note ? shortNote(block30.note) : null}
-                                            </div>
-
+                                return (
+                                    <div key={h} style={{ display: "contents" }}>
+                                        <div style={{ padding: 10, textAlign: "right", background: "#fff", fontWeight: 800 }}>
+                                            {String(h).padStart(2, "0")}
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        );
-                    })}
-                </div>
-            </section>
+
+                                        {weekDays.map((d) => {
+                                            const past = d.iso <= aucklandDate;
+
+                                            const busy00 = isBusy(d.iso, start00, start00 + 30);
+                                            const busy30 = isBusy(d.iso, start30, start30 + 30);
+
+                                            const block00 = findBusyBlockAt(d.iso, start00, start00 + 30);
+                                            const block30 = findBusyBlockAt(d.iso, start30, start30 + 30);
+
+
+                                            const hasNote00 = Boolean(block00?.note && String(block00.note).trim());
+                                            const hasNote30 = Boolean(block30?.note && String(block30.note).trim());
+
+
+                                            const highlight00 =
+                                                hoveredCell?.date === d.iso &&
+                                                (hoveredCell?.slotStart === start00 || hoveredCell?.slotStart + 30 === start00);
+
+                                            const highlight30 =
+                                                hoveredCell?.date === d.iso &&
+                                                (hoveredCell?.slotStart === start30 || hoveredCell?.slotStart + 30 === start30);
+
+                                            return (
+                                                <div key={`${d.iso}-${h}`} style={{ borderLeft: "1px solid #eee", borderTop: "1px solid #eee" }}>
+                                                    <div
+                                                        onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
+                                                        onMouseEnter={() => {
+                                                            if (loadingWeek) return;
+                                                            setHoveredCell({ date: d.iso, slotStart: start00 });
+                                                            setHoverPreview({
+                                                                date: d.iso,
+                                                                start: start00,
+                                                                end: start00 + 30,
+                                                                note: block00?.note || null,
+                                                            });
+                                                        }}
+                                                        onMouseLeave={() => {
+                                                            setHoveredCell(null);
+                                                            setHoverPreview(null);
+                                                        }}
+                                                        onClick={() => {
+                                                            if (loadingWeek) return;
+                                                            if (past) return;
+
+                                                            const slotStart = start00;
+                                                            const slotEnd = start00 + 60;
+                                                            const block = findBusyBlockAt(d.iso, slotStart, slotEnd);
+
+                                                            if (block) openEditModal({ ...block, date: d.iso });
+                                                            else openCreateModal(d.iso, slotStart);
+                                                        }}
+                                                        style={{
+                                                            height: 22,
+                                                            borderBottom: "1px dashed #f0f0f0",
+                                                            cursor: past ? "not-allowed" : "pointer",
+                                                            background: busy00 ? "#f5f5f5" : "#fff",
+                                                            opacity: past ? 0.5 : 1,
+                                                            outline:
+                                                                hoveredCell?.date === d.iso &&
+                                                                    (hoveredCell?.slotStart === start00 || hoveredCell?.slotStart + 30 === start00)
+                                                                    ? "2px solid #1f7aea"
+                                                                    : "none",
+                                                            outlineOffset: -2,
+
+                                                            // important for inline text
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            padding: "0 4px",
+                                                            fontSize: 11,
+                                                            color: "#444",
+                                                            overflow: "hidden",
+                                                            whiteSpace: "nowrap",
+                                                            textOverflow: "ellipsis",
+                                                        }}
+                                                        title={
+                                                            past
+                                                                ? "Past day"
+                                                                : `${minutesToTime(start00)} - ${minutesToTime(start00 + 30)}${block00?.note ? ` | ${displayNote(block00.note)}` : ""
+                                                                }`
+                                                        }
+                                                    >
+                                                        {busy00 && block00?.note ? shortNote(block00.note) : null}
+                                                    </div>
+
+                                                    <div
+                                                        onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
+                                                        onMouseEnter={() => {
+                                                            if (loadingWeek) return;
+                                                            setHoveredCell({ date: d.iso, slotStart: start30 });
+                                                            setHoverPreview({
+                                                                date: d.iso,
+                                                                start: start30,
+                                                                end: start30 + 30,
+                                                                note: block30?.note || null,
+                                                            });
+                                                        }}
+                                                        onMouseLeave={() => {
+                                                            setHoveredCell(null);
+                                                            setHoverPreview(null);
+                                                        }}
+                                                        onClick={() => {
+                                                            if (loadingWeek) return;
+                                                            if (past) return;
+
+                                                            const slotStart = start30;
+                                                            const slotEnd = start30 + 60;
+                                                            const block = findBusyBlockAt(d.iso, slotStart, slotEnd);
+
+                                                            if (block) openEditModal({ ...block, date: d.iso });
+                                                            else openCreateModal(d.iso, slotStart);
+                                                        }}
+                                                        style={{
+                                                            height: 22,
+                                                            cursor: past ? "not-allowed" : "pointer",
+                                                            background: busy30 ? "#f5f5f5" : "#fff",
+                                                            opacity: past ? 0.5 : 1,
+                                                            outline:
+                                                                hoveredCell?.date === d.iso &&
+                                                                    (hoveredCell?.slotStart === start30 || hoveredCell?.slotStart + 30 === start30)
+                                                                    ? "2px solid #1f7aea"
+                                                                    : "none",
+                                                            outlineOffset: -2,
+
+                                                            // important for inline text
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            padding: "0 4px",
+                                                            fontSize: 11,
+                                                            color: "#444",
+                                                            overflow: "hidden",
+                                                            whiteSpace: "nowrap",
+                                                            textOverflow: "ellipsis",
+                                                        }}
+                                                        title={
+                                                            past
+                                                                ? "Past day"
+                                                                : `${minutesToTime(start30)} - ${minutesToTime(start30 + 60)}${block30?.note ? ` | ${displayNote(block30.note)}` : ""
+                                                                }`
+                                                        }
+                                                    >
+                                                        {busy30 && block30?.note ? shortNote(block30.note) : null}
+                                                    </div>
+
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </section>
+            </div>
 
             {/* Hover preview tooltip */}
-            {hoverPreview && (
-                <div
-                    style={{
-                        position: "fixed",
-                        left: hoverPos.x + 12,
-                        top: hoverPos.y + 12,
-                        background: "#111",
-                        color: "#fff",
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        fontSize: 12,
-                        zIndex: 9999,
-                        pointerEvents: "none",
-                        opacity: 0.92,
-                    }}
-                >
-                    <div style={{ fontWeight: 700 }}>
-                        {hoverPreview.date} {minutesToTime(hoverPreview.start)} - {minutesToTime(hoverPreview.end)}
-                    </div>
-
-                    {hoverPreview.note && (
-                        <div style={{ marginTop: 4, maxWidth: 260 }}>
-                            {displayNote(hoverPreview.note)}
+            {
+                hoverPreview && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            left: hoverPos.x + 12,
+                            top: hoverPos.y + 12,
+                            background: "#111",
+                            color: "#fff",
+                            padding: "6px 10px",
+                            borderRadius: 8,
+                            fontSize: 12,
+                            zIndex: 9999,
+                            pointerEvents: "none",
+                            opacity: 0.92,
+                        }}
+                    >
+                        <div style={{ fontWeight: 700 }}>
+                            {hoverPreview.date} {minutesToTime(hoverPreview.start)} - {minutesToTime(hoverPreview.end)}
                         </div>
-                    )}
+
+                        {hoverPreview.note && (
+                            <div style={{ marginTop: 4, maxWidth: 260 }}>
+                                {displayNote(hoverPreview.note)}
+                            </div>
+                        )}
 
 
-                </div>
-            )}
+                    </div>
+                )
+            }
 
             {/* Modal: block time */}
-            {selectedCell && (
-                <div
-                    style={{
-                        position: "fixed",
-                        left: 0,
-                        top: 0,
-                        right: 0,
-                        bottom: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: "rgba(0,0,0,0.35)",
-                        zIndex: 9999,
-                    }}
-                    onClick={() => setSelectedCell(null)}
-                >
+            {
+                selectedCell && (
                     <div
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ background: "#fff", padding: 20, borderRadius: 12, minWidth: 360 }}
+                        style={{
+                            position: "fixed",
+                            left: 0,
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "rgba(0,0,0,0.35)",
+                            zIndex: 9999,
+                        }}
+                        onClick={() => setSelectedCell(null)}
                     >
-                        <h3 style={{ marginTop: 0 }}>
-                            Block {selectedCell.date} | {minutesToTime(selectedCell.start)} -{" "}
-                            {minutesToTime(selectedCell.start + modalDuration)}
-                        </h3>
+                        <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ background: "#fff", padding: 20, borderRadius: 12, minWidth: 360 }}
+                        >
+                            <h3 style={{ marginTop: 0 }}>
+                                Block {selectedCell.date} | {minutesToTime(selectedCell.start)} -{" "}
+                                {minutesToTime(selectedCell.start + modalDuration)}
+                            </h3>
 
-                        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                            <div>
-                                <label style={{ display: "block", marginBottom: 6 }}>Start</label>
-                                <input
-                                    type="time"
-                                    value={modalStart}
-                                    onChange={(e) => {
-                                        setModalStart(e.target.value);
-                                        const s = timeToMinutes(e.target.value);
-                                        const eMin = timeToMinutes(modalEnd);
-                                        setModalDuration(Math.max(0, eMin - s));
-                                    }}
-                                />
-                            </div>
-
-                            <div>
-                                <label style={{ display: "block", marginBottom: 6 }}>End</label>
-                                <input
-                                    type="time"
-                                    value={modalEnd}
-                                    onChange={(e) => {
-                                        setModalEnd(e.target.value);
-                                        const s = timeToMinutes(modalStart);
-                                        const eMin = timeToMinutes(e.target.value);
-                                        setModalDuration(Math.max(0, eMin - s));
-                                    }}
-                                />
-                            </div>
-                        </div>
-
-                        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const s = timeToMinutes(modalStart);
-                                    setModalEnd(minutesToTime(s + 60));
-                                    setModalDuration(60);
-                                }}
-                            >
-                                +60m
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const s = timeToMinutes(modalStart);
-                                    setModalEnd(minutesToTime(s + 120));
-                                    setModalDuration(120);
-                                }}
-                            >
-                                +120m
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const s = timeToMinutes(defaultStart);
-                                    const e = timeToMinutes(defaultEnd);
-                                    setModalStart(minutesToTime(s));
-                                    setModalEnd(minutesToTime(e));
-                                    setModalDuration(e - s);
-                                }}
-                            >
-                                Block whole day (default hours)
-                            </button>
-                        </div>
-
-                        <div style={{ marginTop: 12, padding: 10, border: "1px solid #eee", borderRadius: 10 }}>
-                            {!selectedBlock && (
-                                <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+                            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                                <div>
+                                    <label style={{ display: "block", marginBottom: 6 }}>Start</label>
                                     <input
-                                        type="checkbox"
-                                        checked={isRecurring}
-                                        onChange={(e) => setIsRecurring(e.target.checked)}
+                                        type="time"
+                                        value={modalStart}
+                                        onChange={(e) => {
+                                            setModalStart(e.target.value);
+                                            const s = timeToMinutes(e.target.value);
+                                            const eMin = timeToMinutes(modalEnd);
+                                            setModalDuration(Math.max(0, eMin - s));
+                                        }}
                                     />
-                                    Repeat weekly
-                                </label>
-                            )}
-
-                            {!selectedBlock && isRecurring && (
-                                <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                                    <span style={{ color: "#555" }}>Weeks ahead:</span>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        max={52}
-                                        value={repeatWeeks}
-                                        onChange={(e) => setRepeatWeeks(Number(e.target.value))}
-                                        style={{ width: 90 }}
-                                    />
-                                    <span style={{ color: "#555" }}>(creates one block per week)</span>
                                 </div>
-                            )}
 
-                            {selectedBlock && extractSeriesId(selectedBlock.note) && (
-                                <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontWeight: 700 }}>
+                                <div>
+                                    <label style={{ display: "block", marginBottom: 6 }}>End</label>
                                     <input
-                                        type="checkbox"
-                                        checked={applyToSeries}
-                                        onChange={(e) => setApplyToSeries(e.target.checked)}
+                                        type="time"
+                                        value={modalEnd}
+                                        onChange={(e) => {
+                                            setModalEnd(e.target.value);
+                                            const s = timeToMinutes(modalStart);
+                                            const eMin = timeToMinutes(e.target.value);
+                                            setModalDuration(Math.max(0, eMin - s));
+                                        }}
                                     />
-                                    Apply changes to the whole series
-                                </label>
-                            )}
-                        </div>
+                                </div>
+                            </div>
 
-                        <div style={{ marginTop: 10 }}>
-                            <label style={{ display: "block", marginBottom: 6 }}>Note (optional)</label>
-                            <textarea
-                                value={modalNote}
-                                onChange={(e) => setModalNote(e.target.value)}
-                                rows={3}
-                                style={{ width: "100%" }}
-                            />
-                        </div>
+                            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const s = timeToMinutes(modalStart);
+                                        setModalEnd(minutesToTime(s + 60));
+                                        setModalDuration(60);
+                                    }}
+                                >
+                                    +60m
+                                </button>
 
-                        <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "space-between" }}>
-                            <div>
-                                {selectedBlock && (
-                                    <>
-                                        <button onClick={deleteBusyBlock} disabled={saving} style={{ border: "1px solid #ddd" }}>
-                                            Delete this block
-                                        </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const s = timeToMinutes(modalStart);
+                                        setModalEnd(minutesToTime(s + 120));
+                                        setModalDuration(120);
+                                    }}
+                                >
+                                    +120m
+                                </button>
 
-                                        {extractSeriesId(selectedBlock.note) && (
-                                            <button
-                                                onClick={async () => {
-                                                    const sid = extractSeriesId(selectedBlock.note);
-                                                    if (!sid) return;
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const s = timeToMinutes(defaultStart);
+                                        const e = timeToMinutes(defaultEnd);
+                                        setModalStart(minutesToTime(s));
+                                        setModalEnd(minutesToTime(e));
+                                        setModalDuration(e - s);
+                                    }}
+                                >
+                                    Block whole day (default hours)
+                                </button>
+                            </div>
 
-                                                    setSaving(true);
-                                                    setMessage("");
+                            <div style={{ marginTop: 12, padding: 10, border: "1px solid #eee", borderRadius: 10 }}>
+                                {!selectedBlock && (
+                                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={isRecurring}
+                                            onChange={(e) => setIsRecurring(e.target.checked)}
+                                        />
+                                        Repeat weekly
+                                    </label>
+                                )}
 
-                                                    const { error } = await supabase
-                                                        .from("tutor_date_overrides")
-                                                        .delete()
-                                                        .eq("tutor_id", tutorId)
-                                                        .eq("is_available", false)
-                                                        .like("note", `%[SERIES:${sid}]%`);
+                                {!selectedBlock && isRecurring && (
+                                    <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                        <span style={{ color: "#555" }}>Weeks ahead:</span>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={52}
+                                            value={repeatWeeks}
+                                            onChange={(e) => setRepeatWeeks(Number(e.target.value))}
+                                            style={{ width: 90 }}
+                                        />
+                                        <span style={{ color: "#555" }}>(creates one block per week)</span>
+                                    </div>
+                                )}
 
-                                                    if (error) {
-                                                        setMessage(error.message);
-                                                        setSaving(false);
-                                                        return;
-                                                    }
-
-                                                    await loadBusyWeek(tutorId, weekDays);
-                                                    setSaving(false);
-                                                    setSelectedCell(null);
-                                                    setSelectedBlock(null);
-                                                    setModalNote("");
-                                                    setModalDuration(60);
-                                                    setApplyToSeries(false);
-                                                }}
-                                                disabled={saving}
-                                                style={{ border: "1px solid #ddd", marginLeft: 8 }}
-                                            >
-                                                Delete whole series
-                                            </button>
-                                        )}
-                                    </>
+                                {selectedBlock && extractSeriesId(selectedBlock.note) && (
+                                    <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontWeight: 700 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={applyToSeries}
+                                            onChange={(e) => setApplyToSeries(e.target.checked)}
+                                        />
+                                        Apply changes to the whole series
+                                    </label>
                                 )}
                             </div>
 
-
-                            <div style={{ display: "flex", gap: 10 }}>
-                                <button onClick={() => { setSelectedCell(null); setSelectedBlock(null); }} disabled={saving}>
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={saveBusyBlock}
-                                    disabled={saving}
-                                    style={{ background: "#1f7aea", color: "#fff", border: "none", padding: "8px 12px", borderRadius: 8 }}
-                                >
-                                    {saving ? "Saving..." : selectedBlock ? "Save changes" : "Save busy block"}
-                                </button>
+                            <div style={{ marginTop: 10 }}>
+                                <label style={{ display: "block", marginBottom: 6 }}>Note (optional)</label>
+                                <textarea
+                                    value={modalNote}
+                                    onChange={(e) => setModalNote(e.target.value)}
+                                    rows={3}
+                                    style={{ width: "100%" }}
+                                />
                             </div>
-                        </div>
 
+                            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "space-between" }}>
+                                <div>
+                                    {selectedBlock && (
+                                        <>
+                                            <button onClick={deleteBusyBlock} disabled={saving} style={{ border: "1px solid #ddd" }}>
+                                                Delete this block
+                                            </button>
+
+                                            {extractSeriesId(selectedBlock.note) && (
+                                                <button
+                                                    onClick={async () => {
+                                                        const sid = extractSeriesId(selectedBlock.note);
+                                                        if (!sid) return;
+
+                                                        setSaving(true);
+                                                        setMessage("");
+
+                                                        const { error } = await supabase
+                                                            .from("tutor_date_overrides")
+                                                            .delete()
+                                                            .eq("tutor_id", tutorId)
+                                                            .eq("is_available", false)
+                                                            .like("note", `%[SERIES:${sid}]%`);
+
+                                                        if (error) {
+                                                            setMessage(error.message);
+                                                            setSaving(false);
+                                                            return;
+                                                        }
+
+                                                        await loadBusyWeek(tutorId, weekDays);
+                                                        setSaving(false);
+                                                        setSelectedCell(null);
+                                                        setSelectedBlock(null);
+                                                        setModalNote("");
+                                                        setModalDuration(60);
+                                                        setApplyToSeries(false);
+                                                    }}
+                                                    disabled={saving}
+                                                    style={{ border: "1px solid #ddd", marginLeft: 8 }}
+                                                >
+                                                    Delete whole series
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+
+
+                                <div style={{ display: "flex", gap: 10 }}>
+                                    <button onClick={() => { setSelectedCell(null); setSelectedBlock(null); }} disabled={saving}>
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={saveBusyBlock}
+                                        disabled={saving}
+                                        style={{ background: "#1f7aea", color: "#fff", border: "none", padding: "8px 12px", borderRadius: 8 }}
+                                    >
+                                        {saving ? "Saving..." : selectedBlock ? "Save changes" : "Save busy block"}
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
-                </div>
-            )}
-        </main>
+                )
+            }
+        </main >
     );
 }

@@ -216,6 +216,47 @@ export default function ParentStudentsPage() {
 
     return (
         <main style={{ maxWidth: 860, margin: "0 auto", padding: "28px 16px" }}>
+            <style jsx global>{`
+                /* Mobile-first tweaks for /parent/students */
+                @media (max-width: 640px) {
+                    .students-add-grid {
+                        grid-template-columns: 1fr !important;
+                    }
+                        
+                .students-grid {
+                    grid-template-columns: 1fr !important;
+                }
+                        
+                .student-card-header {
+                    flex-direction: column !important;
+                    align-items: stretch !important;
+                }
+                        
+                .student-card-actions {
+                    align-items: stretch !important;
+                    width: 100% !important;
+                }
+                        
+                .student-action-row {
+                    width: 100% !important;
+                    flex-direction: column !important;
+                }
+                        
+                .student-action-row button {
+                    width: 100% !important;
+                }
+                        
+                .delete-confirm-row {
+                    flex-direction: column !important;
+                    align-items: stretch !important;
+                }
+                        
+                .delete-confirm-row input,
+                .delete-confirm-row button {
+                    width: 100% !important;
+                }
+            }
+            `}</style>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <div>
                     <h1 style={{ margin: 0, fontSize: 28 }}>Students</h1>
@@ -272,7 +313,7 @@ export default function ParentStudentsPage() {
                     </p>
 
                     <form onSubmit={handleAddStudent} style={{ marginTop: 12 }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 170px", gap: 10 }}>
+                        <div className="students-add-grid" style={{ display: "grid", gridTemplateColumns: "1fr 180px 170px", gap: 10 }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                                 <label style={{ fontWeight: 700, fontSize: 13, color: "#333" }}>Full name</label>
                                 <input
@@ -365,7 +406,7 @@ export default function ParentStudentsPage() {
                             </a>
                         </div>
                     ) : (
-                        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+                        <div className="students-grid" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
                             {students.map((s) => (
                                 <div
                                     key={s.id}
@@ -376,7 +417,7 @@ export default function ParentStudentsPage() {
                                         background: "#fff",
                                     }}
                                 >
-                                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                                    <div className="student-card-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
                                         <div style={{ flex: 1 }}>
                                             {editingId === s.id ? (
                                                 <div style={{ display: "grid", gap: 8 }}>
@@ -462,7 +503,7 @@ export default function ParentStudentsPage() {
                                         </div>
 
                                         {/* Right side actions */}
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                                        <div className="student-card-actions" style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
                                             <button
                                                 type="button"
                                                 onClick={() => handleToggleCanBook(s.id, !s.can_student_book)}
@@ -482,7 +523,7 @@ export default function ParentStudentsPage() {
                                                 {s.can_student_book ? "Can book: ON" : "Can book: OFF"}
                                             </button>
 
-                                            <div style={{ display: "flex", gap: 8 }}>
+                                            <div className="student-action-row" style={{ display: "flex", gap: 8 }}>
                                                 <button
                                                     type="button"
                                                     onClick={() => startEditStudent(s)}
@@ -533,7 +574,7 @@ export default function ParentStudentsPage() {
                                                 Type <span style={{ fontWeight: 900 }}>DELETE</span> to permanently remove this student.
                                             </div>
 
-                                            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                                            <div className="delete-confirm-row" style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                                                 <input
                                                     value={deleteConfirmText}
                                                     onChange={(e) => setDeleteConfirmText(e.target.value)}

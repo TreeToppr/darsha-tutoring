@@ -40,3 +40,29 @@ a {
     color-scheme: dark;
   }
 }
+
+/* App shell: keeps pages centred and comfortable on phones */
+.appShell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+@media (max-width: 640px) {
+  .appShell {
+    padding: 12px;
+  }
+}
+
+/* Horizontal scroll wrapper for week grids (booking + availability) */
+.gridScroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #eee;
+  border-radius: 12px;
+}
+
+/* Forces a sensible minimum width so the grid doesn't squash on phones */
+.gridInner {
+  min-width: 820px;
+}

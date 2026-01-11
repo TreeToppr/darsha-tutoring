@@ -261,13 +261,31 @@ export default function ParentProfilePage() {
 
     return (
         <div style={{ padding: 24, background: "#fafafa", minHeight: "100vh" }}>
-            <div style={{ maxWidth: 720, margin: "0 auto" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <style>{`
+                .profileWrap { max-width: 720px; margin: 0 auto; }
+                @media (max-width: 640px) {
+                .profileWrap { padding: 0 8px; }
+                .profileTopRow { flex-direction: column; align-items: stretch !important; gap: 10px !important; }
+                .profileBack { align-self: flex-start; }
+                .profileHeaderRow { flex-direction: column; align-items: stretch !important; }
+                .profileHeaderInfo { min-width: 0 !important; }
+                .profileButtons { flex-direction: column; align-items: stretch !important; }
+                .profileButtons label, .profileButtons button { width: 100% !important; text-align: center; justify-content: center; }
+            }
+            `}</style>
+
+            <div className="profileWrap">
+
+                <div className="profileTopRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                     <div>
                         <h1 style={{ margin: 0 }}>Edit profile</h1>
                         <p style={{ margin: "6px 0 0", color: "#555" }}>Update your profile photo.</p>
                     </div>
-                    <Link href="/parent/dashboard" style={{ textDecoration: "none", fontWeight: 800, color: "#1f7aea" }}>
+                    <Link
+                        href="/parent/dashboard"
+                        className="profileBack"
+                        style={{ textDecoration: "none", fontWeight: 800, color: "#1f7aea" }}
+                    >
                         ← Back to dashboard
                     </Link>
                 </div>
@@ -280,7 +298,7 @@ export default function ParentProfilePage() {
 
                 <div style={{ marginTop: 16, padding: 16, borderRadius: 16, background: "#fff", border: "1px solid #eee" }}>
                     <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                        <div className="profileHeaderRow" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                             <div style={{ width: 72, height: 72, borderRadius: "50%", overflow: "hidden", background: "#e9eefc" }}>
                                 {profile?.avatar_url ? (
                                     <img
@@ -306,13 +324,13 @@ export default function ParentProfilePage() {
                                 )}
                             </div>
 
-                            <div style={{ flex: 1, minWidth: 220 }}>
+                            <div className="profileHeaderInfo" style={{ flex: 1, minWidth: 220 }}>
                                 <div style={{ fontWeight: 900, fontSize: 18 }}>{profile?.full_name || "Parent"}</div>
                                 <div style={{ color: "#555", marginTop: 4 }}>Account type: {profile?.role || "parent"}</div>
                             </div>
                         </div>
 
-                        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                        <div className="profileButtons" style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                             <label
                                 style={{
                                     background: "#1f7aea",
