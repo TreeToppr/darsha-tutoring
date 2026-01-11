@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+// import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../../lib/supabaseClient";
+
 
 function NavLink({ href, children, active }) {
     return (
@@ -93,7 +95,8 @@ export default function Navbar() {
         // Signed in: role-specific navigation
         if (role === "parent") {
             return [
-                ...base,
+                // ...base,
+                { href: "/parent/profile", label: "Profile" },
                 { href: "/parent/dashboard", label: "Dashboard" },
                 { href: "/parent/students", label: "Students" },
                 { href: "/book", label: "Book" },
@@ -102,7 +105,8 @@ export default function Navbar() {
 
         if (role === "tutor") {
             return [
-                ...base,
+                // ...base,
+                { href: "/tutor/profile", label: "Profile" },
                 { href: "/tutor/dashboard", label: "Dashboard" },
                 { href: "/tutor/availability", label: "Availability" },
             ];

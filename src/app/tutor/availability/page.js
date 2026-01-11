@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../../../lib/supabaseClient";
 
 const stripSeriesTag = (note) => String(note || "").replace(/\[SERIES:[a-z0-9]+\]\s*/i, "");
 // const displayNote = (note) => stripSeriesTag(note).trim();

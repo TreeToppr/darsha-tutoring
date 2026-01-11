@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../../../lib/supabaseClient";
 
 export default function ParentProfilePage() {
     const router = useRouter();
@@ -15,6 +15,10 @@ export default function ParentProfilePage() {
     const [message, setMessage] = useState("");
     const [fullName, setFullName] = useState("");
     const [savingName, setSavingName] = useState(false);
+    const [phoneNumber, setPhoneNumber] = useState("");
+    const [savingPhone, setSavingPhone] = useState(false);
+    const [addressText, setAddressText] = useState("");
+    const [savingAddress, setSavingAddress] = useState(false);
 
     const loadProfile = async () => {
         setLoading(true);
@@ -30,7 +34,7 @@ export default function ParentProfilePage() {
 
         const { data: profileData, error } = await supabase
             .from("profiles")
-            .select("id, role, full_name, avatar_url")
+            .select("id, role, full_name, phone_number, avatar_url, address_text")
             .eq("id", user.id)
             .single();
 
@@ -47,10 +51,13 @@ export default function ParentProfilePage() {
 
         setProfile(profileData);
         setFullName(profileData?.full_name || "");
+        setPhoneNumber(profileData?.phone_number || "");
+        setAddressText(profileData?.address_text || "");
         setLoading(false);
     };
 
     const saveName = async () => {
+        console.log("saveName clicked", fullName);
         setMessage("");
         setSavingName(true);
 
@@ -78,6 +85,72 @@ export default function ParentProfilePage() {
             setMessage(e?.message || "Could not save name.");
         } finally {
             setSavingName(false);
+        }
+    };
+
+    const savePhoneNumber = async () => {
+        setMessage("");
+        setSavingPhone(true);
+
+        try {
+            const { data: auth } = await supabase.auth.getUser();
+            const user = auth?.user;
+            if (!user) {
+                router.push("/auth/sign-in");
+                return;
+            }
+
+            const phone = (phoneNumber || "").trim();
+
+            // Keep it simple: allow blank, or require at least 7 chars if provided
+            if (phone && phone.length < 7) throw new Error("Please enter a valid phone number.");
+
+            const { error } = await supabase
+                .from("profiles")
+                .update({ phone_number: phone || null })
+                .eq("id", user.id);
+
+            if (error) throw error;
+
+            setMessage("Phone number updated.");
+            await loadProfile();
+        } catch (e) {
+            setMessage(e?.message || "Could not save phone number.");
+        } finally {
+            setSavingPhone(false);
+        }
+    };
+
+    const saveAddress = async () => {
+        setMessage("");
+        setSavingAddress(true);
+
+        try {
+            const { data: auth } = await supabase.auth.getUser();
+            const user = auth?.user;
+            if (!user) {
+                router.push("/auth/sign-in");
+                return;
+            }
+
+            const addr = (addressText || "").trim();
+
+            // allow blank. If provided, require something non-trivial.
+            if (addr && addr.length < 6) throw new Error("Please enter a valid address (or leave it blank).");
+
+            const { error } = await supabase
+                .from("profiles")
+                .update({ address_text: addr || null })
+                .eq("id", user.id);
+
+            if (error) throw error;
+
+            setMessage("Address updated.");
+            await loadProfile();
+        } catch (e) {
+            setMessage(e?.message || "Could not save address.");
+        } finally {
+            setSavingAddress(false);
         }
     };
 
@@ -206,42 +279,89 @@ export default function ParentProfilePage() {
                 )}
 
                 <div style={{ marginTop: 16, padding: 16, borderRadius: 16, background: "#fff", border: "1px solid #eee" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-                        <div style={{ width: 72, height: 72, borderRadius: "50%", overflow: "hidden", background: "#e9eefc" }}>
-                            {profile?.avatar_url ? (
-                                <img
-                                    src={profile.avatar_url}
-                                    alt="Profile"
-                                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                                />
-                            ) : (
-                                <div
-                                    style={{
-                                        width: "100%",
-                                        height: "100%",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        fontWeight: 900,
-                                        color: "#1f7aea",
-                                        fontSize: 26,
-                                    }}
-                                >
-                                    {(profile?.full_name || "P").slice(0, 1).toUpperCase()}
-                                </div>
-                            )}
+                    <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                            <div style={{ width: 72, height: 72, borderRadius: "50%", overflow: "hidden", background: "#e9eefc" }}>
+                                {profile?.avatar_url ? (
+                                    <img
+                                        src={profile.avatar_url}
+                                        alt="Profile"
+                                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                                    />
+                                ) : (
+                                    <div
+                                        style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            fontWeight: 900,
+                                            color: "#1f7aea",
+                                            fontSize: 26,
+                                        }}
+                                    >
+                                        {(profile?.full_name || "P").slice(0, 1).toUpperCase()}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div style={{ flex: 1, minWidth: 220 }}>
+                                <div style={{ fontWeight: 900, fontSize: 18 }}>{profile?.full_name || "Parent"}</div>
+                                <div style={{ color: "#555", marginTop: 4 }}>Account type: {profile?.role || "parent"}</div>
+                            </div>
                         </div>
 
-                        {/* <div style={{ flex: 1, minWidth: 220 }}>
-                            <div style={{ fontWeight: 900, fontSize: 18 }}>{profile?.full_name || "Parent"}</div>
-                            <div style={{ color: "#555", marginTop: 4 }}>Account type: {profile?.role || "parent"}</div>
-                        </div> */}
+                        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                            <label
+                                style={{
+                                    background: "#1f7aea",
+                                    color: "#fff",
+                                    padding: "10px 14px",
+                                    borderRadius: 10,
+                                    fontWeight: 900,
+                                    cursor: uploading ? "not-allowed" : "pointer",
+                                    opacity: uploading ? 0.7 : 1,
+                                }}
+                            >
+                                {uploading ? "Uploading..." : "Upload new photo"}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: "none" }}
+                                    disabled={uploading}
+                                    onChange={(e) => uploadAvatar(e.target.files?.[0])}
+                                />
+                            </label>
+
+                            <button
+                                onClick={removeAvatar}
+                                disabled={deleting || uploading || !profile?.avatar_url}
+                                style={{
+                                    padding: "10px 14px",
+                                    borderRadius: 10,
+                                    border: "1px solid #ddd",
+                                    background: "#fff",
+                                    fontWeight: 900,
+                                    cursor: deleting || uploading ? "not-allowed" : "pointer",
+                                    opacity: deleting || uploading ? 0.7 : 1,
+                                }}
+                            >
+                                {deleting ? "Removing..." : "Remove photo"}
+                            </button>
+                        </div>
+
+                        <p style={{ marginTop: 12, color: "#666", fontSize: 13 }}>
+                            Tip: use a square image for best results. Max size 3MB.
+                        </p>
+
+                        {/* full name */}
                         <div style={{ marginTop: 14 }}>
                             <label style={{ display: "block", fontWeight: 800, marginBottom: 6 }}>Full name</label>
                             <input
                                 value={fullName}
                                 onChange={(e) => setFullName(e.target.value)}
-                                placeholder="e.g. Jane Smith"
+                                placeholder="e.g. Alice Bing"
                                 style={{
                                     width: "100%",
                                     padding: "10px 12px",
@@ -251,8 +371,9 @@ export default function ParentProfilePage() {
                                 }}
                             />
 
-                            <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+                            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                                 <button
+                                    type="button"
                                     onClick={saveName}
                                     disabled={savingName}
                                     style={{
@@ -271,51 +392,80 @@ export default function ParentProfilePage() {
                             </div>
                         </div>
 
-
-                    </div>
-
-                    <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                        <label
-                            style={{
-                                background: "#1f7aea",
-                                color: "#fff",
-                                padding: "10px 14px",
-                                borderRadius: 10,
-                                fontWeight: 900,
-                                cursor: uploading ? "not-allowed" : "pointer",
-                                opacity: uploading ? 0.7 : 1,
-                            }}
-                        >
-                            {uploading ? "Uploading..." : "Upload new photo"}
+                        {/* phone number */}
+                        <div style={{ marginTop: 14 }}>
+                            <label style={{ display: "block", fontWeight: 800, marginBottom: 6 }}>Phone number</label>
                             <input
-                                type="file"
-                                accept="image/*"
-                                style={{ display: "none" }}
-                                disabled={uploading}
-                                onChange={(e) => uploadAvatar(e.target.files?.[0])}
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                placeholder="e.g. 021 123 4567"
+                                type="tel"
+                                style={{
+                                    width: "100%",
+                                    padding: "10px 12px",
+                                    borderRadius: 10,
+                                    border: "1px solid #ddd",
+                                    background: "#fff",
+                                }}
                             />
-                        </label>
 
-                        <button
-                            onClick={removeAvatar}
-                            disabled={deleting || uploading || !profile?.avatar_url}
-                            style={{
-                                padding: "10px 14px",
-                                borderRadius: 10,
-                                border: "1px solid #ddd",
-                                background: "#fff",
-                                fontWeight: 900,
-                                cursor: deleting || uploading ? "not-allowed" : "pointer",
-                                opacity: deleting || uploading ? 0.7 : 1,
-                            }}
-                        >
-                            {deleting ? "Removing..." : "Remove photo"}
-                        </button>
+                            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <button
+                                    type="button"
+                                    onClick={savePhoneNumber}
+                                    disabled={savingPhone}
+                                    style={{
+                                        padding: "10px 14px",
+                                        borderRadius: 10,
+                                        border: "1px solid #ddd",
+                                        background: "#fff",
+                                        fontWeight: 900,
+                                        cursor: savingPhone ? "not-allowed" : "pointer",
+                                        opacity: savingPhone ? 0.7 : 1,
+                                    }}
+                                >
+                                    {savingPhone ? "Saving..." : "Save phone"}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* address */}
+                        <div style={{ marginTop: 14 }}>
+                            <label style={{ display: "block", fontWeight: 800, marginBottom: 6 }}>Address (for in person lessons)</label>
+                            <input
+                                value={addressText}
+                                onChange={(e) => setAddressText(e.target.value)}
+                                placeholder="e.g. 12 Example Street, Suburb, Auckland"
+                                style={{
+                                    width: "100%",
+                                    padding: "10px 12px",
+                                    borderRadius: 10,
+                                    border: "1px solid #ddd",
+                                    background: "#fff",
+                                }}
+                            />
+
+                            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <button
+                                    type="button"
+                                    onClick={saveAddress}
+                                    disabled={savingAddress}
+                                    style={{
+                                        padding: "10px 14px",
+                                        borderRadius: 10,
+                                        border: "1px solid #ddd",
+                                        background: "#fff",
+                                        fontWeight: 900,
+                                        cursor: savingAddress ? "not-allowed" : "pointer",
+                                        opacity: savingAddress ? 0.7 : 1,
+                                    }}
+                                >
+                                    {savingAddress ? "Saving..." : "Save address"}
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
-                    <p style={{ marginTop: 12, color: "#666", fontSize: 13 }}>
-                        Tip: use a square image for best results. Max size 3MB.
-                    </p>
                 </div>
             </div>
         </div>

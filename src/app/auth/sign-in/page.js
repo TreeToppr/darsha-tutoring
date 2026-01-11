@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../../../lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
 export default function SignInPage() {
@@ -11,14 +11,14 @@ export default function SignInPage() {
     const [message, setMessage] = useState("");
     const router = useRouter();
 
-    const signInWithGoogle = async () => {
-        await supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
-            },
-        });
-    };
+    // const signInWithGoogle = async () => {
+    //     await supabase.auth.signInWithOAuth({
+    //         provider: "google",
+    //         options: {
+    //             redirectTo: `${window.location.origin}/auth/callback`,
+    //         },
+    //     });
+    // };
 
     const handleSignIn = async (e) => {
         e.preventDefault();
@@ -47,16 +47,49 @@ export default function SignInPage() {
             return;
         }
 
-        const { data: profile, error: profileError } = await supabase
+        let { data: profile, error: profileError } = await supabase
             .from("profiles")
             .select("role")
             .eq("id", user.id)
             .single();
 
         if (profileError || !profile) {
-            setMessage("Signed in, but could not load profile.");
-            setLoading(false);
-            return;
+            const fallbackName =
+                user.user_metadata?.full_name ||
+                user.user_metadata?.name ||
+                user.email ||
+                "Parent";
+
+            const fallbackPhone = user.user_metadata?.phone_number || null;
+
+            // Default new users to parent
+            const { error: insertError } = await supabase.from("profiles").insert({
+                id: user.id,
+                role: "parent",
+                full_name: fallbackName,
+                phone_number: fallbackPhone,
+            });
+
+            if (insertError) {
+                setMessage(insertError.message);
+                setLoading(false);
+                return;
+            }
+
+            // Re-load profile after insert
+            const { data: newProfile, error: newProfileError } = await supabase
+                .from("profiles")
+                .select("role")
+                .eq("id", user.id)
+                .single();
+
+            if (newProfileError || !newProfile) {
+                setMessage("Signed in, but could not load profile.");
+                setLoading(false);
+                return;
+            }
+
+            profile = newProfile;
         }
 
         const role = profile.role;
@@ -68,6 +101,23 @@ export default function SignInPage() {
         else setMessage("Signed in, but role is unknown.");
 
         setLoading(false);
+    };
+
+    const handleGoogleSignIn = async () => {
+        setLoading(true);
+        setMessage("");
+
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: `${window.location.origin}/auth/callback`,
+            },
+        });
+
+        if (error) {
+            setMessage(error.message);
+            setLoading(false);
+        }
     };
 
     return (
@@ -99,6 +149,12 @@ export default function SignInPage() {
                     {loading ? "Signing in..." : "Sign in"}
                 </button>
             </form>
+
+            <div style={{ marginTop: 16 }}>
+                <button type="button" onClick={handleGoogleSignIn} disabled={loading} style={{ width: "100%" }}>
+                    {loading ? "Redirecting..." : "Continue with Google"}
+                </button>
+            </div>
 
             {message && <p>{message}</p>}
         </main>

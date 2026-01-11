@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../../../lib/supabaseClient";
 import Link from "next/link";
 
 export default function TutorDashboard() {
@@ -16,7 +16,7 @@ export default function TutorDashboard() {
     const loadBookings = async (tId) => {
         const { data, error } = await supabase
             .from("bookings")
-            .select("id, session_date, start_time, end_time, status, notes, is_recurring, recurring_group_id")
+            .select("id, session_date, start_time, end_time, status, notes, is_recurring, recurring_group_id, payment_status, lesson_mode, booking_address_text")
             .eq("tutor_id", tId)
             .order("created_at", { ascending: false });
 
@@ -92,6 +92,36 @@ export default function TutorDashboard() {
 
         if (tutorRecord) await loadBookings(tutorRecord.id);
         setUpdatingId("");
+    };
+
+    const handleMarkPaid = async (bookingOrGroup, type = "single") => {
+        setMessage("");
+        setUpdatingId(type === "recurring" ? `paid-group-${bookingOrGroup}` : `paid-${bookingOrGroup}`);
+
+        try {
+            if (type === "recurring") {
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ payment_status: "paid" })
+                    .eq("recurring_group_id", bookingOrGroup);
+
+                if (error) throw error;
+            } else {
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ payment_status: "paid" })
+                    .eq("id", bookingOrGroup);
+
+                if (error) throw error;
+            }
+
+            if (tutorRecord) await loadBookings(tutorRecord.id);
+            setMessage("Marked as paid.");
+        } catch (e) {
+            setMessage(e?.message || "Could not mark as paid.");
+        } finally {
+            setUpdatingId(null);
+        }
     };
 
     useEffect(() => {
@@ -181,6 +211,36 @@ export default function TutorDashboard() {
                                         </>
                                     )}
                                 </div>
+
+                                <div style={{ marginTop: 4, color: "#555" }}>
+                                    Payment: <strong>{b.payment_status || "unpaid"}</strong>
+                                    {b.lesson_mode ? ` • ${b.lesson_mode === "in_person" ? "In person" : "Online"}` : ""}
+                                </div>
+
+                                {(b.payment_status || "unpaid") !== "paid" && (
+                                    <div style={{ marginTop: 6 }}>
+                                        <button
+                                            disabled={
+                                                updatingId === (b.type === "recurring" ? `paid-group-${b.recurring_group_id}` : `paid-${b.id}`)
+                                            }
+                                            onClick={() =>
+                                                b.type === "recurring"
+                                                    ? handleMarkPaid(b.recurring_group_id, "recurring")
+                                                    : handleMarkPaid(b.id, "single")
+                                            }
+                                        >
+                                            {updatingId === (b.type === "recurring" ? `paid-group-${b.recurring_group_id}` : `paid-${b.id}`)
+                                                ? "Updating..."
+                                                : "Mark as paid"}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {b.lesson_mode === "in_person" && b.booking_address_text && (
+                                    <div style={{ marginTop: 4, color: "#555" }}>
+                                        Address: {b.booking_address_text}
+                                    </div>
+                                )}
 
                                 {b.status === "requested" && (
                                     <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
