@@ -124,42 +124,192 @@ export default function SignInPage() {
     };
 
     return (
-        <main style={{ maxWidth: 480, margin: "0 auto", padding: 32 }}>
-            <h1>Sign in</h1>
-
-            <form onSubmit={handleSignIn}>
-                <div style={{ marginBottom: 12 }}>
-                    <input
-                        type="email"
-                        placeholder="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                    />
+        <main
+            style={{
+                minHeight: "calc(100vh - 72px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 18,
+                background:
+                    "radial-gradient(1200px 600px at 20% 0%, #eef5ff 0%, transparent 60%), radial-gradient(900px 500px at 90% 10%, #f5f7ff 0%, transparent 55%), #ffffff",
+            }}
+        >
+            <div style={{ width: "100%", maxWidth: 460 }}>
+                <div style={{ marginBottom: 14, textAlign: "center" }}>
+                    <div style={{ fontWeight: 900, fontSize: 22, letterSpacing: 0.2 }}>Welcome back</div>
+                    <div style={{ color: "#666", marginTop: 6, fontSize: 14 }}>
+                        Sign in to manage bookings and students.
+                    </div>
                 </div>
 
-                <div style={{ marginBottom: 12 }}>
-                    <input
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                    />
+                <div
+                    style={{
+                        border: "1px solid #eee",
+                        borderRadius: 16,
+                        background: "#fff",
+                        boxShadow: "0 8px 30px rgba(15, 23, 42, 0.08)",
+                        overflow: "hidden",
+                    }}
+                >
+                    <div style={{ padding: 18 }}>
+                        {/* Google */}
+                        <button
+                            type="button"
+                            onClick={handleGoogleSignIn}
+                            disabled={loading}
+                            style={{
+                                width: "100%",
+                                padding: "12px 12px",
+                                borderRadius: 12,
+                                border: "1px solid #e6e6e6",
+                                background: "#fff",
+                                cursor: loading ? "not-allowed" : "pointer",
+                                fontWeight: 800,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 10,
+                            }}
+                        >
+                            <span
+                                aria-hidden="true"
+                                style={{
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: 999,
+                                    border: "1px solid #e6e6e6",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontWeight: 900,
+                                    fontSize: 12,
+                                    color: "#444",
+                                }}
+                            >
+                                G
+                            </span>
+                            {loading ? "Redirecting..." : "Continue with Google"}
+                        </button>
+
+                        {/* Divider */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0" }}>
+                            <div style={{ height: 1, background: "#eee", flex: 1 }} />
+                            <div style={{ fontSize: 12, color: "#777", fontWeight: 800 }}>OR</div>
+                            <div style={{ height: 1, background: "#eee", flex: 1 }} />
+                        </div>
+
+                        {/* Email/password */}
+                        <form onSubmit={handleSignIn}>
+                            <div style={{ display: "grid", gap: 10 }}>
+                                <div>
+                                    <label style={{ display: "block", fontSize: 12, fontWeight: 900, marginBottom: 6, color: "#222" }}>
+                                        Email
+                                    </label>
+                                    <input
+                                        type="email"
+                                        placeholder="you@example.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                        autoComplete="email"
+                                        style={{
+                                            width: "100%",
+                                            padding: "12px 12px",
+                                            borderRadius: 12,
+                                            border: "1px solid #e6e6e6",
+                                            outline: "none",
+                                            fontSize: 14,
+                                        }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: "block", fontSize: 12, fontWeight: 900, marginBottom: 6, color: "#222" }}>
+                                        Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        placeholder="Your password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                        autoComplete="current-password"
+                                        style={{
+                                            width: "100%",
+                                            padding: "12px 12px",
+                                            borderRadius: 12,
+                                            border: "1px solid #e6e6e6",
+                                            outline: "none",
+                                            fontSize: 14,
+                                        }}
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    style={{
+                                        width: "100%",
+                                        padding: "12px 12px",
+                                        borderRadius: 12,
+                                        border: "1px solid #0b3d91",
+                                        background: "#0b3d91",
+                                        color: "#fff",
+                                        cursor: loading ? "not-allowed" : "pointer",
+                                        fontWeight: 900,
+                                        fontSize: 14,
+                                    }}
+                                >
+                                    {loading ? "Signing in..." : "Sign in"}
+                                </button>
+                            </div>
+                        </form>
+
+                        {message && (
+                            <div
+                                style={{
+                                    marginTop: 14,
+                                    padding: 12,
+                                    borderRadius: 12,
+                                    border: "1px solid #ffd7d7",
+                                    background: "#fff5f5",
+                                    color: "#8a1f1f",
+                                    fontWeight: 750,
+                                    fontSize: 13,
+                                }}
+                            >
+                                {message}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div
+                        style={{
+                            padding: 14,
+                            borderTop: "1px solid #f1f1f1",
+                            background: "#fafafa",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                        }}
+                    >
+                        <div style={{ fontSize: 13, color: "#555" }}>
+                            New here?{" "}
+                            <a href="/auth/sign-up" style={{ fontWeight: 900, color: "#0b3d91", textDecoration: "none" }}>
+                                Create an account
+                            </a>
+                        </div>
+
+                        <a href="/" style={{ fontSize: 13, color: "#555", textDecoration: "none", fontWeight: 800 }}>
+                            Back to Home
+                        </a>
+                    </div>
                 </div>
-
-                <button type="submit" disabled={loading}>
-                    {loading ? "Signing in..." : "Sign in"}
-                </button>
-            </form>
-
-            <div style={{ marginTop: 16 }}>
-                <button type="button" onClick={handleGoogleSignIn} disabled={loading} style={{ width: "100%" }}>
-                    {loading ? "Redirecting..." : "Continue with Google"}
-                </button>
             </div>
-
-            {message && <p>{message}</p>}
         </main>
     );
 }

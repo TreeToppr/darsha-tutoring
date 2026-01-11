@@ -171,9 +171,18 @@ export default function Navbar() {
                 }}
             >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                    <span style={{ fontWeight: 900, letterSpacing: 0.2, whiteSpace: "nowrap" }}>
-                        Tutoring
-                    </span>
+                    <Link
+                        href="/"
+                        style={{
+                            fontWeight: 900,
+                            letterSpacing: 0.2,
+                            whiteSpace: "nowrap",
+                            textDecoration: "none",
+                            color: "#111",
+                        }}
+                    >
+                        DarshaTutor
+                    </Link>
 
                     {loading && (
                         <span style={{ fontSize: 12, color: "#777", whiteSpace: "nowrap" }}>
