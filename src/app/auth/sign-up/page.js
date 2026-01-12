@@ -74,7 +74,7 @@ export default function SignUpPage() {
             return;
         }
 
-        // If confirmations are ON, there is no session yet. w
+        // If confirmations are ON, there is no session yet. 
         setMessage("Account created. Please check your email to confirm, then sign in.");
         setLoading(false);
     };
