@@ -141,6 +141,7 @@ export default function BookPage() {
     const [hoverPreview, setHoverPreview] = useState(null); // { date, start, end }
     const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
     const [slotsByDate, setSlotsByDate] = useState({});
+    // const [myBookings, setMyBookings] = useState([]);
     const [loadingWeek, setLoadingWeek] = useState(false);
     // const [timesAreHalfHour] = useState(true);
     const isLoading = loadingWeek;
@@ -150,6 +151,20 @@ export default function BookPage() {
     const [priceQuote, setPriceQuote] = useState(null); // { base, travel, total }
     const [pricingError, setPricingError] = useState("");
     const [pricingLoading, setPricingLoading] = useState(false);
+    const [parentId, setParentId] = useState(null);
+    // const [myBookingsByDate, setMyBookingsByDate] = useState({}); // { "YYYY-MM-DD": [{...}, ...] }
+    const [bookingsByDate, setBookingsByDate] = useState({});
+    const [otherBookingsByDate, setOtherBookingsByDate] = useState({});
+
+    const statusToBucket = (status) => {
+        const s = String(status || "").toLowerCase();
+        if (["accepted", "confirmed", "approved"].includes(s)) return "accepted";
+        if (["requested", "pending"].includes(s)) return "requested";
+        if (["cancelled", "canceled", "deleted"].includes(s)) return "cancelled";
+        return "other";
+    };
+
+    const timeStrToMinutes = (t) => timeToMinutes(String(t || "").slice(0, 5));
 
     const getSelectedStudent = () => students.find((s) => s.id === selectedStudentId) || null;
 
@@ -262,16 +277,19 @@ export default function BookPage() {
             });
         }
 
-        // existing bookings
+        // existing bookings (we still block booking them, but we’ll DISPLAY them on the calendar)
         const { data: bookings } = await supabase
             .from("bookings")
-            .select("start_time, end_time")
+            .select("start_time, end_time, status")
             .eq("tutor_id", tutor.id)
             .eq("session_date", selectedDate);
 
-        if (bookings?.length) {
+        // keep slots generated as-is, but remove overlaps only for bookings that actually occupy time
+        const occupying = (bookings || []).filter((b) => !["cancelled", "deleted"].includes(b.status));
+
+        if (occupying.length) {
             generated = generated.filter((slot) => {
-                return !bookings.some((b) => {
+                return !occupying.some((b) => {
                     const bs = timeToMinutes(String(b.start_time).slice(0, 5));
                     const be = timeToMinutes(String(b.end_time).slice(0, 5));
                     return slot.start < be && slot.end > bs;
@@ -309,6 +327,65 @@ export default function BookPage() {
         }
     };
 
+    const loadWeekBookings = async (days) => {
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) return;
+
+        const dayIsos = days.map((d) => d.iso);
+
+        // 1) YOUR bookings (coloured)
+        const { data, error } = await supabase
+            .from("bookings")
+            .select("id, session_date, start_time, end_time, status, student_id")
+            .eq("parent_id", user.id)
+            .in("session_date", dayIsos);
+
+        if (error) {
+            setMessage(error.message);
+            return;
+        }
+
+        const myMap = {};
+        for (const b of (data || []).filter((b) => !["cancelled", "deleted"].includes(String(b.status || "").toLowerCase()))) {
+            if (!myMap[b.session_date]) myMap[b.session_date] = [];
+            myMap[b.session_date].push(b);
+        }
+        setBookingsByDate(myMap);
+
+        // 2) OTHER parents’ bookings for the same tutor/week (grey, no details)
+        const { data: tutor } = await supabase
+            .from("tutors")
+            .select("id")
+            .eq("is_active", true)
+            .single();
+
+        if (!tutor?.id) {
+            setOtherBookingsByDate({});
+            return;
+        }
+
+        const { data: other, error: otherErr } = await supabase
+            .from("bookings")
+            .select("id, session_date, start_time, end_time, status")
+            .eq("tutor_id", tutor.id)
+            .neq("parent_id", user.id)
+            .in("session_date", dayIsos);
+
+        if (otherErr) {
+            setOtherBookingsByDate({});
+            return;
+        }
+
+        const otherMap = {};
+        for (const b of (other || []).filter((b) => !["cancelled", "deleted"].includes(String(b.status || "").toLowerCase()))) {
+            if (!otherMap[b.session_date]) otherMap[b.session_date] = [];
+            otherMap[b.session_date].push(b);
+        }
+        setOtherBookingsByDate(otherMap);
+    };
 
     const handleRequestRecurring = async (sessionDate, slot) => {
         setMessage("");
@@ -612,6 +689,8 @@ export default function BookPage() {
         setRequestingKey("");
     };
 
+
+
     useEffect(() => {
         const init = async () => {
             const {
@@ -622,6 +701,8 @@ export default function BookPage() {
                 router.push("/auth/sign-in");
                 return;
             }
+
+            setParentId(user.id);
 
             const { data: profile } = await supabase
                 .from("profiles")
@@ -700,11 +781,18 @@ export default function BookPage() {
         return arr;
     })(); // minutes since midnight at 30-min increments
 
+    // useEffect(() => {
+    //     if (checking) return;
+    //     loadWeekSlots(weekDays);
+    //     loadMyBookingsForWeek(weekDays, parentId);
+    //     // eslint-disable-next-line react-hooks/exhaustive-deps
+    // }, [monthOffset, checking, parentId]);
+
     useEffect(() => {
-        if (checking) return;
         loadWeekSlots(weekDays);
+        loadWeekBookings(weekDays);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [monthOffset, checking]);
+    }, [monthOffset]);
 
     useEffect(() => {
         if (checking) return;
@@ -1365,6 +1453,46 @@ export default function BookPage() {
                                         const canBook00 = isAvailable00 && !!selectedStudentId;
                                         const canBook30 = isAvailable30 && !!selectedStudentId;
 
+                                        const dayBookings = bookingsByDate[d.iso] || [];
+                                        const otherDayBookings = otherBookingsByDate[d.iso] || [];
+
+                                        const findOverlapAtMinute = (list, minute) => {
+                                            return (list || []).find((b) => {
+                                                const bs = timeToMinutes(String(b.start_time).slice(0, 5));
+                                                const be = timeToMinutes(String(b.end_time).slice(0, 5));
+                                                if (bs == null || be == null) return false;
+                                                return minute >= bs && minute < be;
+                                            });
+                                        };
+
+                                        const myBooking00 = findOverlapAtMinute(dayBookings, start00);
+                                        const myBooking30 = findOverlapAtMinute(dayBookings, start30);
+                                        const otherBooking00 = findOverlapAtMinute(otherDayBookings, start00);
+                                        const otherBooking30 = findOverlapAtMinute(otherDayBookings, start30);
+
+                                        // must be available, have student selected, AND not already booked by anyone
+                                        const finalCanBook00 = canBook00 && !myBooking00 && !otherBooking00;
+                                        const finalCanBook30 = canBook30 && !myBooking30 && !otherBooking30;
+
+                                        const bucketColours = {
+                                            accepted: { bg: "#DFF7E9", fg: "#0A4B2E" },
+                                            requested: { bg: "#FFF7CC", fg: "#6B4E00" },
+                                            other: { bg: "#E6F0FF", fg: "#0B2E66" },
+                                        };
+
+                                        const getCellColours = ({ isAvailable, myBooking, otherBooking }) => {
+                                            if (myBooking) {
+                                                const bucket = statusToBucket(myBooking.status);
+                                                return bucketColours[bucket] || bucketColours.other;
+                                            }
+                                            if (otherBooking) {
+                                                return { bg: "#E0E0E0", fg: "#555" }; // other parent's booking: grey, no details
+                                            }
+                                            return isAvailable
+                                                ? { bg: "#fff", fg: "#000" }
+                                                : { bg: "#f5f5f5", fg: "#999" };
+                                        };
+
                                         return (
                                             <div
                                                 key={`${d.iso}-${h}-${row}`}
@@ -1374,9 +1502,8 @@ export default function BookPage() {
                                                     onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
                                                     onMouseEnter={() => {
                                                         if (loadingWeek) return;
-                                                        // Hour window starting at this cell
                                                         setHoveredRange({ date: d.iso, start: start00, end: start00 + 60 });
-                                                        if (!canBook00) return;
+                                                        if (!finalCanBook00) return;
                                                         setHoverPreview({ date: d.iso, start: start00, end: start00 + 60 });
                                                     }}
                                                     onMouseLeave={() => {
@@ -1384,7 +1511,7 @@ export default function BookPage() {
                                                         setHoverPreview(null);
                                                     }}
                                                     onClick={() => {
-                                                        if (!canBook00) return;
+                                                        if (!finalCanBook00) return;
                                                         if (loadingWeek) return;
                                                         setSelectedCell({ date: d.iso, start: start00 });
                                                         setModalDuration(60);
@@ -1392,13 +1519,17 @@ export default function BookPage() {
                                                     }}
                                                     style={{
                                                         height: 22,
-                                                        cursor: isLoading ? "wait" : canBook00 ? "pointer" : "not-allowed",
+                                                        cursor: isLoading ? "wait" : finalCanBook00 ? "pointer" : "not-allowed",
                                                         display: "flex",
                                                         alignItems: "center",
                                                         justifyContent: "center",
                                                         borderBottom: "1px dashed #f0f0f0",
-                                                        background: isLoading ? "#fff" : isAvailable00 ? "#fff" : "#f5f5f5",
-                                                        color: isLoading ? "#999" : isAvailable00 ? "#000" : "#999",
+                                                        background: isLoading
+                                                            ? "#fff"
+                                                            : getCellColours({ isAvailable: isAvailable00, myBooking: myBooking00, otherBooking: otherBooking00 }).bg,
+                                                        color: isLoading
+                                                            ? "#999"
+                                                            : getCellColours({ isAvailable: isAvailable00, myBooking: myBooking00, otherBooking: otherBooking00 }).fg,
                                                         opacity: isLoading ? 0.6 : 1,
                                                         outline:
                                                             hoveredRange &&
@@ -1409,16 +1540,25 @@ export default function BookPage() {
                                                                 : "none",
                                                         outlineOffset: -2,
                                                     }}
-                                                    title={loadingWeek ? "Loading availability..." : canBook00 ? `Click to book ${d.iso} ${minutesToTime(start00)}` : "Unavailable"}
+                                                    title={
+                                                        loadingWeek
+                                                            ? "Loading availability..."
+                                                            : myBooking00
+                                                                ? `Your booking (${String(myBooking00.status || "").toLowerCase()})`
+                                                                : otherBooking00
+                                                                    ? "Booked"
+                                                                    : finalCanBook00
+                                                                        ? `Click to book ${d.iso} ${minutesToTime(start00)}`
+                                                                        : "Unavailable"
+                                                    }
                                                 />
 
                                                 <div
                                                     onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
                                                     onMouseEnter={() => {
                                                         if (loadingWeek) return;
-                                                        // Hour window starting at this cell (09:30-10:30 style)
                                                         setHoveredRange({ date: d.iso, start: start30, end: start30 + 60 });
-                                                        if (!canBook30) return;
+                                                        if (!finalCanBook30) return;
                                                         setHoverPreview({ date: d.iso, start: start30, end: start30 + 60 });
                                                     }}
                                                     onMouseLeave={() => {
@@ -1426,7 +1566,7 @@ export default function BookPage() {
                                                         setHoverPreview(null);
                                                     }}
                                                     onClick={() => {
-                                                        if (!canBook30) return;
+                                                        if (!finalCanBook30) return;
                                                         if (loadingWeek) return;
                                                         setSelectedCell({ date: d.iso, start: start30 });
                                                         setModalDuration(60);
@@ -1434,12 +1574,16 @@ export default function BookPage() {
                                                     }}
                                                     style={{
                                                         height: 22,
-                                                        cursor: isLoading ? "wait" : canBook30 ? "pointer" : "not-allowed",
+                                                        cursor: isLoading ? "wait" : finalCanBook30 ? "pointer" : "not-allowed",
                                                         display: "flex",
                                                         alignItems: "center",
                                                         justifyContent: "center",
-                                                        background: isLoading ? "#fff" : isAvailable30 ? "#fff" : "#f5f5f5",
-                                                        color: isLoading ? "#999" : isAvailable30 ? "#000" : "#999",
+                                                        background: isLoading
+                                                            ? "#fff"
+                                                            : getCellColours({ isAvailable: isAvailable30, myBooking: myBooking30, otherBooking: otherBooking30 }).bg,
+                                                        color: isLoading
+                                                            ? "#999"
+                                                            : getCellColours({ isAvailable: isAvailable30, myBooking: myBooking30, otherBooking: otherBooking30 }).fg,
                                                         outline:
                                                             hoveredRange &&
                                                                 hoveredRange.date === d.iso &&
@@ -1449,7 +1593,17 @@ export default function BookPage() {
                                                                 : "none",
                                                         outlineOffset: -2,
                                                     }}
-                                                    title={loadingWeek ? "Loading availability..." : canBook30 ? `Click to book ${d.iso} ${minutesToTime(start30)}` : "Unavailable"}
+                                                    title={
+                                                        loadingWeek
+                                                            ? "Loading availability..."
+                                                            : myBooking30
+                                                                ? `Your booking (${String(myBooking30.status || "").toLowerCase()})`
+                                                                : otherBooking30
+                                                                    ? "Booked"
+                                                                    : finalCanBook30
+                                                                        ? `Click to book ${d.iso} ${minutesToTime(start30)}`
+                                                                        : "Unavailable"
+                                                    }
                                                 />
                                             </div>
                                         );
