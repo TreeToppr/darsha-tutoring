@@ -35,7 +35,47 @@ export default function SignUpPage() {
             return;
         }
 
-        setMessage("Check your email to confirm your signup.");
+        // If email confirmations are OFF, Supabase returns a session immediately.
+        if (data?.session) {
+            // Optional: create profile row immediately (recommended)
+            const userId = data.user?.id;
+
+            const fallbackName =
+                data.user?.user_metadata?.full_name ||
+                data.user?.email ||
+                fullName.trim() ||
+                "Parent";
+
+            const fallbackPhone =
+                data.user?.user_metadata?.phone_number ||
+                phoneNumber.trim() ||
+                null;
+
+            // Create profile if missing (safe upsert pattern)
+            const { error: profileUpsertError } = await supabase
+                .from("profiles")
+                .upsert(
+                    {
+                        id: userId,
+                        role: "parent",
+                        full_name: fallbackName,
+                        phone_number: fallbackPhone,
+                    },
+                    { onConflict: "id" }
+                );
+
+            if (profileUpsertError) {
+                setMessage(profileUpsertError.message);
+                setLoading(false);
+                return;
+            }
+
+            router.push("/parent/dashboard");
+            return;
+        }
+
+        // If confirmations are ON, there is no session yet.
+        setMessage("Account created. Please check your email to confirm, then sign in.");
         setLoading(false);
     };
 
