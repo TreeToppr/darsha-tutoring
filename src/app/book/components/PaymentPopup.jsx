@@ -87,7 +87,7 @@ export default function PaymentPopup({
                             onClick={() => onStartPoliPay(payment.bookingId)}
                             style={{ marginTop: 12 }}
                         >
-                            Pay with POLi
+                            {/* Pay with POLi */}
                         </button>
                     ) : null}
 

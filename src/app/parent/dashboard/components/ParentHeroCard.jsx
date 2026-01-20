@@ -119,8 +119,17 @@ export default function ParentHeroCard({ profile, students }) {
                     </div>
                     <div style={{ marginTop: 4, color: "#888", fontSize: 13, fontWeight: 700 }}>Parent</div>
                 </div>
-                
-                <div className="profileRight" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+
+                <div
+                    className="profileRight"
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10,
+                        marginLeft: "auto",      // pushes the button column to the far right
+                        alignSelf: "center",
+                    }}
+                >
                     <Link
                         href="/parent/profile"
                         style={{

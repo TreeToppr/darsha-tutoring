@@ -8,7 +8,7 @@ import PaymentPopup from "./components/PaymentPopup";
 import StudentChips from "./components/StudentChips";
 import LessonModeToggle from "./components/LessonModeToggle";
 import TutorSubjectPicker from "./components/TutorSubjectPicker";
-import BookingModal from "./components/BookingModal";
+// import BookingModal from "./components/BookingModal";
 import BookingCalendar from "./components/BookingCalendar";
 import SubjectChips from "./components/SubjectChips";
 import TutorCards from "./components/TutorCards";
@@ -141,9 +141,9 @@ export default function BookPage() {
     const [selectedTermId, setSelectedTermId] = useState("");
     const [monthOffset, setMonthOffset] = useState(0); // week offset (0 = this week)
     const [minWeekOffset, setMinWeekOffset] = useState(0); // first week that has any availability
-    const [selectedCell, setSelectedCell] = useState(null);
-    const [modalDuration, setModalDuration] = useState(60);
-    const [modalNotes, setModalNotes] = useState("");
+    // const [selectedCell, setSelectedCell] = useState(null);
+    // const [modalDuration, setModalDuration] = useState(60);
+    // const [modalNotes, setModalNotes] = useState("");
     const [lessonMode, setLessonMode] = useState("online"); // "online" | "in_person"
     const [profileAddress, setProfileAddress] = useState("");
     const [bookingAddress, setBookingAddress] = useState("");
@@ -170,6 +170,8 @@ export default function BookPage() {
     const [selectedTutorId, setSelectedTutorId] = useState("");
     const [selectedSubjectId, setSelectedSubjectId] = useState("");
     const [creditBalance, setCreditBalance] = useState(0);
+    const [pendingSlot, setPendingSlot] = useState(null);
+    // shape: { date: "YYYY-MM-DD", start: number, end: number }
 
     const statusToBucket = (status) => {
         const s = String(status || "").toLowerCase();
@@ -182,6 +184,7 @@ export default function BookPage() {
     const timeStrToMinutes = (t) => timeToMinutes(String(t || "").slice(0, 5));
 
     const getSelectedStudent = () => students.find((s) => s.id === selectedStudentId) || null;
+    const getSelectedTutor = () => tutors.find((t) => t.id === selectedTutorId) || null;
 
     const calcBasePrice = (yearLevel) => (Number(yearLevel) >= 7 ? 40 : 30);
 
@@ -613,7 +616,7 @@ export default function BookPage() {
                 amount_total: total,
 
                 status: "requested",
-                notes: modalNotes || null,
+                notes: null,
                 is_recurring: true,
                 recurring_group_id: group.id,
             });
@@ -790,7 +793,7 @@ export default function BookPage() {
 
                 status: "requested",
                 is_recurring: false,
-                notes: modalNotes || null,
+                notes: null,
 
                 payment_status: "unpaid",
                 payment_method: "bank_transfer",
@@ -1010,9 +1013,9 @@ export default function BookPage() {
  * We keep the modal logic in one place so both wizard and calendar behave the same.
  */
     const handleCellClick = ({ date, start }) => {
-        setSelectedCell({ date, start });
-        setModalDuration(60);
-        setModalNotes("");
+        // default to 60 minutes (one hour)
+        setPendingSlot({ date, start, end: start + 60 });
+        setMessage("");
     };
 
     return (
@@ -1076,7 +1079,7 @@ export default function BookPage() {
             />
 
             {/* Modal: minimal booking editor */}
-            <BookingModal
+            {/* <BookingModal
                 open={!!selectedCell}
                 selectedCell={selectedCell}
                 formatISO={formatISO}
@@ -1171,7 +1174,7 @@ export default function BookPage() {
 
                     setSelectedCell(null);
                 }}
-            />
+            /> */}
 
             {/* Booking Wizard */}
             <div style={{ maxWidth: 980, margin: "0 auto", padding: "18px 14px" }}>
@@ -1228,7 +1231,10 @@ export default function BookPage() {
                                 <div style={{ marginTop: 12 }}>
                                     <button
                                         type="button"
-                                        onClick={() => handleSelectStudent("")}
+                                        onClick={() => {
+                                            handleSelectStudent("");
+                                            setPendingSlot(null);
+                                        }}
                                         style={{
                                             border: "1px solid #ddd",
                                             background: "#fff",
@@ -1260,7 +1266,10 @@ export default function BookPage() {
                                 <div style={{ marginTop: 12 }}>
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedSubjectId("")}
+                                        onClick={() => {
+                                            setSelectedSubjectId("");
+                                            setPendingSlot(null);
+                                        }}
                                         style={{
                                             border: "1px solid #ddd",
                                             background: "#fff",
@@ -1280,17 +1289,22 @@ export default function BookPage() {
                         {selectedStudentId && selectedSubjectId && selectedTutorId ? (
                             <>
                                 <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
-                                    Pick a time from the tutor’s calendar
+                                    Pick a time from the {getSelectedTutor()?.display_name || "Selected"}’s calendar
                                 </div>
 
                                 <div style={{ marginBottom: 10, color: "#555", fontWeight: 650 }}>
                                     Student: <b>{getSelectedStudent()?.full_name || "Selected"}</b>
+                                    {/* <b> | </b>
+                                    Tutor: <b>{getSelectedTutor()?.display_name || "Selected"}</b> */}
                                 </div>
 
                                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedTutorId("")}
+                                        onClick={() => {
+                                            setSelectedTutorId("");
+                                            setPendingSlot(null);
+                                        }}
                                         style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
                                     >
                                         Change tutor
@@ -1298,7 +1312,11 @@ export default function BookPage() {
 
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedSubjectId("")}
+                                        onClick={() => {
+                                            setSelectedSubjectId("");
+                                            setPendingSlot(null);
+                                        }}
+
                                         style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
                                     >
                                         Change subject
@@ -1306,7 +1324,10 @@ export default function BookPage() {
 
                                     <button
                                         type="button"
-                                        onClick={() => handleSelectStudent("")}
+                                        onClick={() => {
+                                            handleSelectStudent("");
+                                            setPendingSlot(null);
+                                        }}
                                         style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
                                     >
                                         Change student
@@ -1376,6 +1397,81 @@ export default function BookPage() {
                                     onCellClick={handleCellClick}
                                     onHoverRange={setHoveredRange}
                                 />
+
+                                {pendingSlot ? (
+                                    <div
+                                        style={{
+                                            position: "sticky",
+                                            bottom: 0,
+                                            marginTop: 14,
+                                            padding: 12,
+                                            border: "1px solid #e6e6e6",
+                                            borderRadius: 14,
+                                            background: "#fff",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            gap: 12,
+                                        }}
+                                    >
+                                        <div style={{ fontWeight: 900 }}>
+                                            Selected:{" "}
+                                            {formatISO(pendingSlot.date)}{" "}<br></br>
+                                            {minutesToTime(pendingSlot.start)} - {minutesToTime(pendingSlot.end)}
+                                        </div>
+
+                                        <div style={{ display: "flex", gap: 10 }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPendingSlot(null)}
+                                                style={{
+                                                    border: "1px solid #ddd",
+                                                    background: "#fff",
+                                                    borderRadius: 10,
+                                                    padding: "10px 12px",
+                                                    fontWeight: 900,
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Clear
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    if (!selectedStudentId) {
+                                                        setMessage("Please select a student first.");
+                                                        return;
+                                                    }
+
+                                                    if (lessonMode === "in_person" && !priceQuote) {
+                                                        setMessage("Please calculate the price before confirming an in-person booking.");
+                                                        return;
+                                                    }
+
+                                                    const slot = { start: pendingSlot.start, end: pendingSlot.end };
+
+                                                    // If you later re-enable recurring, switch this based on isRecurring.
+                                                    await handleRequestBooking(pendingSlot.date, slot);
+
+                                                    // Clear selection after requesting
+                                                    setPendingSlot(null);
+                                                }}
+                                                style={{
+                                                    border: "0",
+                                                    background: "#1f7aea",
+                                                    color: "#fff",
+                                                    borderRadius: 10,
+                                                    padding: "10px 14px",
+                                                    fontWeight: 950,
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Click to confirm booking
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : null}
                             </>
                         ) : null}
                     </div>

@@ -13,6 +13,7 @@ import ParentTopBar from "./components/ParentTopBar";
 import QuickStats from "./components/QuickStats";
 import ParentHeroCard from "./components/ParentHeroCard";
 // import BookingsCalendarWeekGrid from "./components/BookingsCalendarWeekGrid";
+import BookingsList from "./components/BookingsList";
 
 import Link from "next/link";
 
@@ -155,7 +156,9 @@ export default function ParentDashboard() {
     // const [activeTab, setActiveTab] = useState("bookings");
     const [creditBalanceNzd, setCreditBalanceNzd] = useState(0);
     const [creditLedgerRows, setCreditLedgerRows] = useState([]);
-    const [view, setView] = useState("both"); // "both" | "profile" | "calendar"
+    // const [view, setView] = useState("both"); // "both" | "profile" | "calendar"
+    const [view, setView] = useState("calendar"); // "calendar" | "list"
+    const [selectedBookingId, setSelectedBookingId] = useState(null);
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -164,15 +167,42 @@ export default function ParentDashboard() {
 
 
     const loadBookings = async (userId) => {
+        setMessage("");
+
         const { data, error } = await supabase
             .from("bookings")
-            .select("id, session_date, start_time, end_time, status, payment_status, lesson_mode, student_id, is_recurring, recurring_group_id, students(full_name)")
+            .select(`
+                id,
+                session_date,
+                start_time,
+                end_time,
+                status,
+                payment_status,
+                payment_method,
+                amount_total,
+                lesson_mode,
+                is_recurring,
+                recurring_group_id,
+                student_id,
+                tutor_id,
+                subject_id,
+                students(full_name),
+                tutors(
+                    display_name,
+                    bank_account_masked,
+                    email,
+                    phone,
+                    tutor_payment_details(payee_name, bank_account)
+                ),
+                subjects(name)
+            `)
             .eq("parent_id", userId)
             .order("session_date", { ascending: true })
             .order("start_time", { ascending: true });
 
         if (error) {
             setMessage(error.message);
+            setBookings([]);
             return;
         }
 
@@ -322,6 +352,16 @@ export default function ParentDashboard() {
 
         checkAuth();
     }, [router]);
+
+    useEffect(() => {
+        if (view !== "list") return;
+        if (!selectedBookingId) return;
+
+        const el = document.getElementById(`booking-${selectedBookingId}`);
+        if (!el) return;
+
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, [view, selectedBookingId, bookings]);
 
     useEffect(() => {
         if (!userId) return;
@@ -494,7 +534,7 @@ export default function ParentDashboard() {
                 <ParentHeroCard profile={profile} students={students} />
 
                 {/* Mobile-only switch (desktop shows both sections) */}
-                <div className="mobileSwitch">
+                {/* <div className="mobileSwitch">
                     <button
                         type="button"
                         onClick={() => setView("profile")}
@@ -528,7 +568,7 @@ export default function ParentDashboard() {
                     >
                         Calendar
                     </button>
-                </div>
+                </div> */}
 
                 {/* Desktop: 2-column dashboard. Mobile: show one at a time. */}
                 <div className="dashGrid">
@@ -542,9 +582,61 @@ export default function ParentDashboard() {
                         />
                     </div> */}
 
-                    <div style={{ display: view === "profile" ? "none" : "block" }}>
+                    {/* <div style={{ display: view === "profile" ? "none" : "block" }}>
                         <BookingsCalendarWeek bookings={bookings} students={students} />
+                    </div> */}
+
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", margin: "8px 0 -6px 0" }}>
+                        <button
+                            onClick={() => setView("calendar")}
+                            style={{
+                                padding: "8px 12px",
+                                borderRadius: 10,
+                                border: "1px solid #ddd",
+                                background: view === "calendar" ? "#111" : "#fff",
+                                color: view === "calendar" ? "#fff" : "#111",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                            }}
+                        >
+                            Calendar
+                        </button>
+
+                        <button
+                            onClick={() => setView("list")}
+                            style={{
+                                padding: "8px 12px",
+                                borderRadius: 10,
+                                border: "1px solid #ddd",
+                                background: view === "list" ? "#111" : "#fff",
+                                color: view === "list" ? "#fff" : "#111",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                            }}
+                        >
+                            List
+                        </button>
                     </div>
+
+                    {view === "calendar" ? (
+                        <BookingsCalendarWeek bookings={bookings} onBookingClick={(bookingId) => {
+                            setSelectedBookingId(bookingId);
+                            setView("list");
+                        }} />
+                    ) : (
+                        <BookingsList
+                            bookings={bookings}
+                            selectedBookingId={selectedBookingId}
+                            onCancel={(booking) =>
+                                setCancelModal({
+                                    booking,
+                                    scope: "single",
+                                    confirmText: "",
+                                })
+                            }
+                        />
+                    )}
+
                 </div>
 
 

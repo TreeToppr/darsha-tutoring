@@ -12,12 +12,13 @@ function minutesToTime(m) {
 }
 
 export default function BookingsCalendarWeekGrid({
-    weekDays,        // [{ iso, label }] for Mon..Sun
-    bookings,        // your parent bookings (include students?.full_name etc.)
+    weekDays,
+    bookings,
     dayStart = "08:00",
     dayEnd = "20:00",
     slotMinutes = 30,
     slotHeight = 22,
+    onBookingClick,
 }) {
     const startMin = timeToMinutes(dayStart);
     const endMin = timeToMinutes(dayEnd);
@@ -109,6 +110,7 @@ export default function BookingsCalendarWeekGrid({
                                     <div
                                         key={b.id}
                                         title={`${studentName} (${timeRange})`}
+                                        onClick={() => onBookingClick?.(b.id)}
                                         style={{
                                             position: "absolute",
                                             left: 6,
@@ -122,6 +124,7 @@ export default function BookingsCalendarWeekGrid({
                                             paddingLeft: 5,
                                             boxSizing: "border-box",
                                             overflow: "hidden",
+                                            cursor: onBookingClick ? "pointer" : "default",
                                         }}
                                     >
                                         <div style={{ fontWeight: 900, fontSize: 13 }}>{studentName}</div>
