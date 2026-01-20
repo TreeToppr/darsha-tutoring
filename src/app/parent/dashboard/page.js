@@ -4,6 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 // import { supabase } from "@/lib/supabaseClient";
 import { supabase } from "../../../lib/supabaseClient";
+import { logAudit } from "../../../lib/auditClient";
+// import DashboardTabs from "./components/DashboardTabs";
+// import BookingsList from "./components/BookingsList";
+import BookingsCalendarWeek from "./components/BookingsCalendarWeek";
+import ProfilePanel from "./components/ProfilePanel";
+import ParentTopBar from "./components/ParentTopBar";
+import QuickStats from "./components/QuickStats";
+import ParentHeroCard from "./components/ParentHeroCard";
+// import BookingsCalendarWeekGrid from "./components/BookingsCalendarWeekGrid";
+
 import Link from "next/link";
 
 const formatISO = (iso) => {
@@ -140,11 +150,18 @@ export default function ParentDashboard() {
     const [cancelModal, setCancelModal] = useState(null);
     const [students, setStudents] = useState([]);
     // { booking, scope: "single" | "series", confirmText: "" }
+    const [tutors, setTutors] = useState([]);
+    // "bookings" | "calendar" | "profile"
+    // const [activeTab, setActiveTab] = useState("bookings");
+    const [creditBalanceNzd, setCreditBalanceNzd] = useState(0);
+    const [creditLedgerRows, setCreditLedgerRows] = useState([]);
+    const [view, setView] = useState("both"); // "both" | "profile" | "calendar"
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
         router.push("/auth/sign-in");
     };
+
 
     const loadBookings = async (userId) => {
         const { data, error } = await supabase
@@ -179,61 +196,99 @@ export default function ParentDashboard() {
         setStudents(data || []);
     };
 
+    const loadTutors = async () => {
+        const { data, error } = await supabase
+            .from("tutors")
+            .select("id, display_name, bio, email, phone, bank_account_masked")
+            .eq("is_active", true)
+            .order("display_name", { ascending: true });
+
+        if (error) {
+            setMessage(error.message);
+            return;
+        }
+        setTutors(data || []);
+    };
+
+    // Loads parent credit balance + latest ledger rows (read-only for parents via RLS)
+    const loadCredits = async (parentId) => {
+        // Safety: avoid running with empty IDs
+        if (!parentId) return;
+
+        // 1) Fast balance
+        const { data: balRow, error: balErr } = await supabase
+            .from("credit_balances")
+            .select("balance_nzd")
+            .eq("parent_id", parentId)
+            .maybeSingle();
+
+        if (balErr) {
+            console.log("loadCredits balance error:", balErr);
+            // Keep defaults rather than crashing the dashboard
+            setCreditBalanceNzd(0);
+        } else {
+            setCreditBalanceNzd(Number(balRow?.balance_nzd || 0));
+        }
+
+        // 2) Latest ledger activity (last 10)
+        const { data: ledgerRows, error: ledErr } = await supabase
+            .from("credit_ledger")
+            .select("id, created_at, delta_amount, currency, reason, booking_id")
+            .eq("parent_id", parentId)
+            .order("created_at", { ascending: false })
+            .limit(10);
+
+        if (ledErr) {
+            console.log("loadCredits ledger error:", ledErr);
+            setCreditLedgerRows([]);
+        } else {
+            setCreditLedgerRows(ledgerRows || []);
+        }
+    };
+
     const handleCancelBooking = async (booking, scope) => {
         setMessage("");
         setUpdatingId(booking.id);
 
         try {
-            if (scope === "series") {
-                // Cancel this booking + all future bookings in the same recurring group
-                const groupId = booking.recurring_group_id;
-                if (!groupId) {
-                    setMessage("This booking isn't linked to a recurring group.");
-                    setUpdatingId("");
-                    return;
-                }
+            // Use secure RPC so parents cannot mint credits by hacking the client
+            const { data, error } = await supabase.rpc("cancel_booking_with_credit", {
+                p_booking_id: booking.id,
+                p_scope: scope, // "single" or "series"
+            });
 
-                // Cancel bookings in the same group from today onwards
-                // (We compare by session_date; simple + robust enough for now)
-                const { error: bookingsError } = await supabase
-                    .from("bookings")
-                    .update({ status: "cancelled" })
-                    .eq("recurring_group_id", groupId)
-                    .gte("session_date", booking.session_date);
-
-                if (bookingsError) {
-                    setMessage(bookingsError.message);
-                    setUpdatingId("");
-                    return;
-                }
-
-                // Optional: also mark the recurring group itself cancelled (prevents future generation if you use it)
-                const { error: groupError } = await supabase
-                    .from("recurring_groups")
-                    .update({ status: "cancelled" })
-                    .eq("id", groupId);
-
-                // If recurring_groups isn't used or policy blocks it, don't fail the whole action
-                if (groupError) console.log("recurring_groups update warning:", groupError.message);
-            } else {
-                // Cancel only this booking
-                const { error } = await supabase
-                    .from("bookings")
-                    .update({ status: "cancelled" })
-                    .eq("id", booking.id);
-
-                if (error) {
-                    setMessage(error.message);
-                    setUpdatingId("");
-                    return;
-                }
+            if (error) {
+                setMessage(error.message);
+                setUpdatingId("");
+                return;
             }
 
+            const totalCredit = Number(data?.total_credit ?? 0);
+
+            await logAudit({
+                action: scope === "series" ? "booking.series_cancelled" : "booking.cancelled",
+                entityType: scope === "series" ? "recurring_group" : "booking",
+                entityId: scope === "series" ? booking.recurring_group_id : booking.id,
+                metadata: {
+                    scope,
+                    booking_id_clicked: booking.id,
+                    total_credit: totalCredit,
+                    ledger_ids: data?.ledger_ids ?? [],
+                },
+            });
+
+            setMessage(
+                totalCredit > 0
+                    ? `Cancelled. Credit issued: $${totalCredit.toFixed(2)} NZD`
+                    : "Cancelled. No refund (within 12 hours)."
+            );
+
             const { data: { user } } = await supabase.auth.getUser();
-            if (user) await Promise.all([loadBookings(user.id), loadStudents(user.id)]);
+            if (user) await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors(), loadCredits(user.id)]);
         } finally {
             setUpdatingId("");
         }
+
     };
 
     useEffect(() => {
@@ -260,7 +315,7 @@ export default function ParentDashboard() {
 
             setProfile(profileData);
 
-            await Promise.all([loadBookings(user.id), loadStudents(user.id)]);
+            await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors(), loadCredits(user.id)]);
             setUserId(user.id);
             setChecking(false);
         };
@@ -345,71 +400,44 @@ export default function ParentDashboard() {
                     .statsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
                     @media (max-width: 640px) { .statsGrid { grid-template-columns: 1fr; } }
                 }
+                    .dashGrid {
+                        display: grid;
+                        // grid-template-columns: 1.05fr 1.45fr;
+                        gap: 14px;
+                        margin-top: 14px;
+                        align-items: start;
+                    }
+
+                    .mobileSwitch {
+                        display: none;
+                        gap: 10px;
+                        margin-top: 14px;
+                    }
+
+                    @media (max-width: 860px) {
+                        .dashGrid {
+                            grid-template-columns: 1fr;
+                        }
+                        .mobileSwitch {
+                            display: flex;
+                        }
+                    }
             `}</style>
 
             <div className="pageWrap">
                 {/* everything else stays inside here */}
 
-                <div className="topRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                    <div>
-                        <h1 style={{ margin: 0 }}>
-                            Welcome {profile?.full_name ? profile.full_name.split(" ")[0] : "back"}!
-                        </h1>
+                <ParentTopBar
+                    firstName={profile?.full_name ? profile.full_name.split(" ")[0] : "back"}
+                />
 
-                        <p style={{ margin: "6px 0 0", color: "#555" }}>Manage students and bookings.</p>
-                    </div>
 
-                    <div className="topActions" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <Link
-                            href="/book"
-                            style={{
-                                background: "#1f7aea",
-                                color: "#fff",
-                                padding: "10px 14px",
-                                borderRadius: 10,
-                                textDecoration: "none",
-                                fontWeight: 800,
-                            }}
-                        >
-                            + Book a lesson
-                        </Link>
-
-                        {/* <button onClick={handleSignOut} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd" }}>
-                            Sign out
-                        </button> */}
-                    </div>
-                </div>
-
-                {/* Quick stats */}
-                <div
-                    style={{
-                        marginTop: 14,
-                        display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                        gap: 12,
-                    }}
-                >
-                    {/* <div className="statsGrid"> */}
-                    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
-                        <div style={{ color: "#666", fontWeight: 800, fontSize: 12 }}>Students</div>
-                        <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{students.length}</div>
-                        <div style={{ color: "#777", fontSize: 12, marginTop: 2 }}>Manage them anytime</div>
-                    </div>
-
-                    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
-                        <div style={{ color: "#666", fontWeight: 800, fontSize: 12 }}>Upcoming</div>
-                        <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{upcomingBookings.length}</div>
-                        <div style={{ color: "#777", fontSize: 12, marginTop: 2 }}>
-                            {requestedUpcoming.length ? `${requestedUpcoming.length} lessons awaiting approval` : "All up to date"}
-                        </div>
-                    </div>
-
-                    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 14, padding: 12 }}>
-                        <div style={{ color: "#666", fontWeight: 800, fontSize: 12 }}>Unpaid</div>
-                        <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{unpaidUpcoming.length}</div>
-                        <div style={{ color: "#777", fontSize: 12, marginTop: 2 }}>For upcoming lessons</div>
-                    </div>
-                </div>
+                <QuickStats
+                    studentsCount={students.length}
+                    upcomingCount={upcomingBookings.length}
+                    requestedCount={requestedUpcoming.length}
+                    unpaidCount={unpaidUpcoming.length}
+                />
 
                 {/* <Link
                     href="/parent/profile"
@@ -463,167 +491,63 @@ export default function ParentDashboard() {
                     </div>
                 </Link> */}
 
-                {/* Big profile header (like your mock) */}
-                <div
-                    className="profileCard"
-                    style={{
-                        marginTop: 16,
-                        padding: 18,
-                        border: "1px solid #eee",
-                        borderRadius: 16,
-                        background: "#fff",
-                        display: "grid",
-                        gap: 16,
-                        alignItems: "center",
-                    }}
-                >
-                    <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                        {/* Avatar + overlapping student bubbles */}
-                        <div style={{ position: "relative", width: 110, height: 84, flex: "0 0 auto" }}>
-                            {/* Parent avatar */}
-                            <div
-                                style={{
-                                    width: 84,
-                                    height: 84,
-                                    borderRadius: "50%",
-                                    overflow: "hidden",
-                                    background: "#e9eefc",
-                                }}
-                            >
-                                {profile?.avatar_url ? (
-                                    <img
-                                        src={profile.avatar_url}
-                                        alt="Profile"
-                                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                                    />
-                                ) : (
-                                    <div
-                                        style={{
-                                            width: "100%",
-                                            height: "100%",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            fontWeight: 900,
-                                            color: "#1f7aea",
-                                            fontSize: 28,
-                                        }}
-                                    >
-                                        {(profile?.full_name || "P").slice(0, 1).toUpperCase()}
-                                    </div>
-                                )}
-                            </div>
+                <ParentHeroCard profile={profile} students={students} />
 
-                            {/* Student bubbles overlap the avatar a bit */}
-                            <div
-                                style={{
-                                    position: "absolute",
-                                    left: 52,     // shift right so it overlaps the avatar edge
-                                    top: 52,      // sit near bottom of avatar
-                                    display: "flex",
-                                    alignItems: "center",
-                                    pointerEvents: "auto",
-                                }}
-                            >
-                                {students.slice(0, 5).map((s, i) => (
-                                    <Link
-                                        key={s.id}
-                                        href="/parent/students"
-                                        title={s.full_name}
-                                        style={{
-                                            width: 34,
-                                            height: 34,
-                                            borderRadius: "50%",
-                                            background: "#f1f3f5",
-                                            border: "1px solid #e6e6e6",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            fontWeight: 900,
-                                            color: "#333",
-                                            marginLeft: i === 0 ? 0 : -10, // overlap each other
-                                            boxShadow: "0 1px 0 rgba(0,0,0,0.06)",
-                                        }}
-                                    >
-                                        {(s.full_name || "S").slice(0, 1).toUpperCase()}
-                                    </Link>
-                                ))}
+                {/* Mobile-only switch (desktop shows both sections) */}
+                <div className="mobileSwitch">
+                    <button
+                        type="button"
+                        onClick={() => setView("profile")}
+                        style={{
+                            flex: 1,
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            border: "1px solid #ddd",
+                            background: view === "profile" ? "#111" : "#fff",
+                            color: view === "profile" ? "#fff" : "#111",
+                            fontWeight: 900,
+                            cursor: "pointer",
+                        }}
+                    >
+                        Overview
+                    </button>
 
-                                <Link
-                                    href="/parent/students"
-                                    title="Add student"
-                                    style={{
-                                        width: 34,
-                                        height: 34,
-                                        borderRadius: "50%",
-                                        background: "#e9eefc",
-                                        border: "1px solid #cdd9ff",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        fontWeight: 900,
-                                        color: "#1f7aea",
-                                        textDecoration: "none",
-                                        marginLeft: students.length ? -10 : 0, // keep overlap consistent
-                                        boxShadow: "0 1px 0 rgba(0,0,0,0.06)",
-                                    }}
-                                >
-                                    +
-                                </Link>
-                            </div>
-                        </div>
-
-
-                        <div style={{ minWidth: 240, alignSelf: "flex-start" }}>
-                            <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1 }}>
-                                {profile?.full_name || "Parent"}
-                            </div>
-
-                            <div style={{ marginTop: 4, color: "#888", fontSize: 13, fontWeight: 700 }}>
-                                Parent
-                            </div>
-                        </div>
-
-                    </div>
-
-                    {/* Actions (right side) */}
-                    <div className="profileRight" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
-                        <Link
-                            href="/parent/profile"
-                            style={{
-                                padding: "10px 16px",
-                                borderRadius: 999,
-                                background: "#1f7aea",
-                                color: "#fff",
-                                textDecoration: "none",
-                                fontWeight: 900,
-                                minWidth: 170,
-                                textAlign: "center",
-                                boxShadow: "0 4px 14px rgba(31,122,234,0.25)",
-                            }}
-                        >
-                            Edit profile
-                        </Link>
-
-                        <Link
-                            href="/parent/students"
-                            style={{
-                                padding: "10px 16px",
-                                borderRadius: 999,
-                                border: "1px solid #ddd",
-                                background: "#fff",
-                                color: "#111",
-                                fontWeight: 800,
-                                minWidth: 170,
-                                textAlign: "center",
-                                textDecoration: "none",
-                            }}
-                        >
-                            Manage students
-                        </Link>
-                    </div>
-
+                    <button
+                        type="button"
+                        onClick={() => setView("calendar")}
+                        style={{
+                            flex: 1,
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            border: "1px solid #ddd",
+                            background: view === "calendar" ? "#111" : "#fff",
+                            color: view === "calendar" ? "#fff" : "#111",
+                            fontWeight: 900,
+                            cursor: "pointer",
+                        }}
+                    >
+                        Calendar
+                    </button>
                 </div>
+
+                {/* Desktop: 2-column dashboard. Mobile: show one at a time. */}
+                <div className="dashGrid">
+                    {/* <div style={{ display: view === "calendar" ? "none" : "block" }}>
+                        <ProfilePanel
+                            profile={profile}
+                            students={students}
+                            tutors={tutors}
+                            creditBalanceNzd={creditBalanceNzd}
+                            creditLedgerRows={creditLedgerRows}
+                        />
+                    </div> */}
+
+                    <div style={{ display: view === "profile" ? "none" : "block" }}>
+                        <BookingsCalendarWeek bookings={bookings} students={students} />
+                    </div>
+                </div>
+
+
 
                 {/* <nav style={{ margin: "12px 0 24px", display: "flex", gap: 12 }}>
                     <Link href="/parent/dashboard">Dashboard</Link>
@@ -632,245 +556,7 @@ export default function ParentDashboard() {
 
                 {message && <p>{message}</p>}
 
-                <section style={{ marginTop: 24 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-                        <h2 style={{ margin: 0 }}>My bookings</h2>
-                        {/* <Link href="/parent/students" style={{ color: "#1f7aea", textDecoration: "none", fontWeight: 700 }}>
-                            Manage students →
-                        </Link> */}
-                    </div>
 
-                    {bookings.length === 0 ? (
-                        <div style={{ marginTop: 12, padding: 16, border: "1px solid #eee", borderRadius: 12, background: "#fafafa" }}>
-                            <p style={{ margin: 0, fontWeight: 700 }}>No bookings yet.</p>
-                            <p style={{ margin: "8px 0 0", color: "#555" }}>
-                                When you book a lesson, it will appear here.
-                            </p>
-                        </div>
-                    ) : (
-                        <div style={{ marginTop: 12, display: "grid", gap: 18 }}>
-                            {/* Upcoming */}
-                            <div>
-                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                                    <h3 style={{ margin: "0 0 10px" }}>Upcoming</h3>
-                                    <div style={{ color: "#777", fontWeight: 700, fontSize: 13 }}>{upcomingBookings.length} booking(s)</div>
-                                </div>
-
-                                {upcomingBookings.length === 0 ? (
-                                    <div style={{ padding: 14, border: "1px solid #eee", borderRadius: 12, background: "#fafafa", color: "#555" }}>
-                                        No upcoming bookings.
-                                    </div>
-                                ) : (
-                                    <div style={{ display: "grid", gap: 10 }}>
-                                        {upcomingBookings.map((b) => {
-                                            const studentName = b.students?.full_name || "Student";
-                                            const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
-
-                                            return (
-                                                <div
-                                                    key={b.id}
-                                                    style={{
-                                                        border: "1px solid #eee",
-                                                        borderRadius: 12,
-                                                        padding: 14,
-                                                        background: "#fff",
-                                                        display: "flex",
-                                                        justifyContent: "space-between",
-                                                        gap: 12,
-                                                        alignItems: "center",
-                                                        flexWrap: "wrap",
-                                                    }}
-                                                >
-                                                    <div style={{ minWidth: 240, display: "flex", gap: 12, alignItems: "flex-start" }}>
-                                                        <div
-                                                            style={{
-                                                                width: 40,
-                                                                height: 40,
-                                                                borderRadius: "50%",
-                                                                background: "#f1f3f5",
-                                                                border: "1px solid #e6e6e6",
-                                                                display: "flex",
-                                                                alignItems: "center",
-                                                                justifyContent: "center",
-                                                                fontWeight: 900,
-                                                                color: "#333",
-                                                                flex: "0 0 auto",
-                                                            }}
-                                                            title={studentName}
-                                                        >
-                                                            {(studentName || "S").slice(0, 1).toUpperCase()}
-                                                        </div>
-
-                                                        {/* Wrap tags + student line together */}
-                                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <div style={{ marginTop: 6, color: "#333" }}>
-                                                                <span style={{ color: "#555" }}>Student:</span> <strong>{studentName}</strong>
-                                                            </div>
-                                                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                                                <span style={{ fontWeight: 900 }}>{formatISO(b.session_date)}</span>
-                                                                <span style={{ color: "#555", fontWeight: 700 }}>{timeRange}</span>
-
-                                                                <span style={statusStyle(b.status)}>{statusLabel(b.status)}</span>
-                                                                <span style={paymentStyle(b.payment_status)}>{(b.payment_status || "unpaid").toUpperCase()}</span>
-
-                                                                <span style={modeStyle(b.lesson_mode)}>
-                                                                    {b.lesson_mode === "in_person" ? "IN PERSON" : "ONLINE"}
-                                                                </span>
-                                                            </div>
-
-                                                        </div>
-                                                    </div>
-
-                                                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                                        {(b.status === "requested" || b.status === "accepted") && (
-                                                            <button
-                                                                disabled={updatingId === b.id}
-                                                                onClick={() =>
-                                                                    setCancelModal({
-                                                                        booking: b,
-                                                                        scope: (b.recurring_group_id || b.is_recurring) ? "series" : "single",
-                                                                        confirmText: "",
-                                                                    })
-                                                                }
-                                                                style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd" }}
-                                                            >
-                                                                {updatingId === b.id ? "Working..." : "Cancel"}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Completed */}
-                            <div>
-                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                                    <h3 style={{ margin: "0 0 10px" }}>Completed</h3>
-                                    <div style={{ color: "#777", fontWeight: 700, fontSize: 13 }}>{completedBookings.length} booking(s)</div>
-                                </div>
-
-                                {completedBookings.length === 0 ? (
-                                    <div style={{ padding: 14, border: "1px solid #eee", borderRadius: 12, background: "#fafafa", color: "#555" }}>
-                                        No completed bookings yet.
-                                    </div>
-                                ) : (
-                                    <div style={{ display: "grid", gap: 10 }}>
-                                        {completedBookings.map((b) => {
-                                            const studentName = b.students?.full_name || "Student";
-                                            const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
-
-                                            return (
-                                                <div
-                                                    key={b.id}
-                                                    style={{
-                                                        border: "1px solid #eee",
-                                                        borderRadius: 12,
-                                                        padding: 14,
-                                                        background: "#fff",
-                                                        display: "flex",
-                                                        justifyContent: "space-between",
-                                                        gap: 12,
-                                                        alignItems: "center",
-                                                        flexWrap: "wrap",
-                                                        opacity: 0.85,
-                                                    }}
-                                                >
-                                                    <div style={{ minWidth: 240 }}>
-                                                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                                            <span style={{ fontWeight: 900 }}>{formatISO(b.session_date)}</span>
-                                                            <span style={{ color: "#555", fontWeight: 700 }}>{timeRange}</span>
-
-                                                            <span style={completedStyle}>COMPLETED</span>
-
-                                                            <span style={statusStyle(b.status)}>{statusLabel(b.status)}</span>
-                                                            <span style={paymentStyle(b.payment_status)}>{(b.payment_status || "unpaid").toUpperCase()}</span>
-
-                                                            <span style={modeStyle(b.lesson_mode)}>
-                                                                {b.lesson_mode === "in_person" ? "IN PERSON" : "ONLINE"}
-                                                            </span>
-                                                        </div>
-
-                                                        <div style={{ marginTop: 6, color: "#333" }}>
-                                                            <span style={{ color: "#555" }}>Student:</span> <strong>{studentName}</strong>
-                                                        </div>
-                                                    </div>
-
-                                                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                                        {/* No cancel button for completed */}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Deleted */}
-                            <div>
-                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                                    <h3 style={{ margin: "0 0 10px" }}>Deleted</h3>
-                                    <div style={{ color: "#777", fontWeight: 700, fontSize: 13 }}>{deletedBookings.length} booking(s)</div>
-                                </div>
-
-                                {deletedBookings.length === 0 ? (
-                                    <div style={{ padding: 14, border: "1px solid #eee", borderRadius: 12, background: "#fafafa", color: "#555" }}>
-                                        No deleted bookings.
-                                    </div>
-                                ) : (
-                                    <div style={{ display: "grid", gap: 10 }}>
-                                        {deletedBookings.map((b) => {
-                                            const studentName = b.students?.full_name || "Student";
-                                            const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
-
-                                            return (
-                                                <div
-                                                    key={b.id}
-                                                    style={{
-                                                        border: "1px solid #eee",
-                                                        borderRadius: 12,
-                                                        padding: 14,
-                                                        background: "#fff",
-                                                        display: "flex",
-                                                        justifyContent: "space-between",
-                                                        gap: 12,
-                                                        alignItems: "center",
-                                                        flexWrap: "wrap",
-                                                        opacity: 0.75,
-                                                    }}
-                                                >
-                                                    <div style={{ minWidth: 240 }}>
-                                                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                                            <span style={{ fontWeight: 900 }}>{formatISO(b.session_date)}</span>
-                                                            <span style={{ color: "#555", fontWeight: 700 }}>{timeRange}</span>
-
-                                                            <span style={completedStyle}>DELETED</span>
-
-                                                            <span style={statusStyle(b.status)}>{statusLabel(b.status)}</span>
-                                                            <span style={paymentStyle(b.payment_status)}>{(b.payment_status || "unpaid").toUpperCase()}</span>
-
-                                                            <span style={modeStyle(b.lesson_mode)}>
-                                                                {b.lesson_mode === "in_person" ? "IN PERSON" : "ONLINE"}
-                                                            </span>
-                                                        </div>
-
-                                                        <div style={{ marginTop: 6, color: "#333" }}>
-                                                            <span style={{ color: "#555" }}>Student:</span> <strong>{studentName}</strong>
-                                                        </div>
-                                                    </div>
-
-                                                    <div />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </section>
 
                 {/* Cancel modal */}
                 {cancelModal?.booking && (

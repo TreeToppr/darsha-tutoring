@@ -3,6 +3,15 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
+import { logAudit } from "../../lib/auditClient";
+import PaymentPopup from "./components/PaymentPopup";
+import StudentChips from "./components/StudentChips";
+import LessonModeToggle from "./components/LessonModeToggle";
+import TutorSubjectPicker from "./components/TutorSubjectPicker";
+import BookingModal from "./components/BookingModal";
+import BookingCalendar from "./components/BookingCalendar";
+import SubjectChips from "./components/SubjectChips";
+import TutorCards from "./components/TutorCards";
 
 function generateSlots(start, end) {
     const slots = [];
@@ -155,6 +164,12 @@ export default function BookPage() {
     // const [myBookingsByDate, setMyBookingsByDate] = useState({}); // { "YYYY-MM-DD": [{...}, ...] }
     const [bookingsByDate, setBookingsByDate] = useState({});
     const [otherBookingsByDate, setOtherBookingsByDate] = useState({});
+    const [tutors, setTutors] = useState([]);
+    const [subjects, setSubjects] = useState([]);
+    const [tutorSubjects, setTutorSubjects] = useState({}); // { tutorId: [subjectId,...] }
+    const [selectedTutorId, setSelectedTutorId] = useState("");
+    const [selectedSubjectId, setSelectedSubjectId] = useState("");
+    const [creditBalance, setCreditBalance] = useState(0);
 
     const statusToBucket = (status) => {
         const s = String(status || "").toLowerCase();
@@ -170,10 +185,43 @@ export default function BookPage() {
 
     const calcBasePrice = (yearLevel) => (Number(yearLevel) >= 7 ? 40 : 30);
 
-    async function calculateTravelCost(address) {
+    /**
+ * Given a subjectId, return tutors who teach it.
+ * tutorSubjects = { tutorId: [subjectId,...] }
+ */
+    const getTutorsForSubject = (subjectId) => {
+        if (!subjectId) return [];
+        return tutors.filter((t) => (tutorSubjects[t.id] || []).includes(subjectId));
+    };
+
+    const handleSelectStudent = (studentId) => {
+        setSelectedStudentId(studentId);
+
+        // Reset the rest of the wizard when student changes
+        setSelectedSubjectId("");
+        setSelectedTutorId("");
+    };
+
+    const handleSelectSubject = (subjectId) => {
+        setSelectedSubjectId(subjectId);
+
+        // Reset tutor when subject changes
+        setSelectedTutorId("");
+    };
+
+    const handleSelectTutor = (tutorId) => {
+        setSelectedTutorId(tutorId);
+    };
+
+    async function calculateTravelCost() {
         setPricingError("");
         setPricingLoading(true);
+
         try {
+            // Use current booking address from state
+            const address = bookingAddress?.trim();
+            if (!address) throw new Error("Please enter an address");
+
             const res = await fetch("/api/drive-minutes", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -187,12 +235,12 @@ export default function BookPage() {
             if (!Number.isFinite(mins)) throw new Error("Invalid minutes returned");
 
             const st = getSelectedStudent();
-            const yearLevel = st?.year_level ?? 7; // fallback
+            const yearLevel = st?.year_level ?? 7;
             const base = calcBasePrice(yearLevel);
             const travel = Math.max(0, Math.round(mins)); // $1 per minute
             const total = base + travel;
 
-            setDriveMinutes(travel);
+            setDriveMinutes(mins);
             setPriceQuote({ base, travel, total });
         } catch (e) {
             setDriveMinutes(null);
@@ -203,20 +251,37 @@ export default function BookPage() {
         }
     }
 
+    const loadCreditBalance = async (parentId) => {
+        const { data, error } = await supabase
+            .from("credit_balances")
+            .select("balance_nzd")
+            .eq("parent_id", parentId)
+            .maybeSingle();
 
-    const fetchSlotsForDate = async (selectedDate) => {
-        const { aucklandDate, aucklandMinutes } = getAucklandNowISODateAndMinutes();
+        if (error) {
+            console.error("credit_balances error:", error);
+            return;
+        }
+
+        setCreditBalance(Number(data?.balance_nzd ?? 0));
+    };
+
+    const fetchSlotsForDate = async (selectedDate, selectedTutorId) => {
+        const { aucklandDate } = getAucklandNowISODateAndMinutes();
 
         // block past dates and today
         if (selectedDate <= aucklandDate) return [];
 
+        if (!selectedTutorId) return [];
+
         const { data: tutor, error: tutorError } = await supabase
             .from("tutors")
             .select("id, default_window_start, default_window_end")
-            .eq("is_active", true)
+            .eq("id", selectedTutorId)
             .single();
 
         if (tutorError || !tutor) return [];
+
 
         // date override: explicitly available
         // date override: explicitly available (extra openings)
@@ -278,14 +343,18 @@ export default function BookPage() {
         }
 
         // existing bookings (we still block booking them, but we’ll DISPLAY them on the calendar)
-        const { data: bookings } = await supabase
-            .from("bookings")
+        const { data: busy, error: busyErr } = await supabase
+            .from("booking_busy_blocks")
             .select("start_time, end_time, status")
             .eq("tutor_id", tutor.id)
             .eq("session_date", selectedDate);
 
-        // keep slots generated as-is, but remove overlaps only for bookings that actually occupy time
-        const occupying = (bookings || []).filter((b) => !["cancelled", "deleted"].includes(b.status));
+        if (busyErr) {
+            console.error("busy blocks fetch error (slots):", busyErr);
+        }
+
+        // remove overlaps for busy blocks (they already exclude cancelled/deleted)
+        const occupying = busy || [];
 
         if (occupying.length) {
             generated = generated.filter((slot) => {
@@ -300,37 +369,34 @@ export default function BookPage() {
         return generated;
     };
 
-    const loadWeekSlots = async (days) => {
+    const loadWeekSlots = async (days, tutorId) => {
         setLoadingWeek(true);
         const map = {};
 
         for (const d of days) {
-            map[d.iso] = await fetchSlotsForDate(d.iso);
+            map[d.iso] = await fetchSlotsForDate(d.iso, tutorId);
         }
 
         setSlotsByDate(map);
         setLoadingWeek(false);
 
-        // If this entire week has zero available slots, automatically move to the next week.
         const totalSlotsThisWeek = Object.values(map).reduce((sum, arr) => sum + (arr?.length || 0), 0);
 
-        // Only auto-advance while we're still searching for the first available week.
-        // Once minWeekOffset is set to a later week, we stop auto-skipping.
         if (totalSlotsThisWeek === 0 && monthOffset < 12 && minWeekOffset === 0) {
             setMonthOffset((prev) => prev + 1);
         }
 
-        // If this week has availability and we haven't anchored the window yet,
-        // lock the 4-week window starting from here.
         if (totalSlotsThisWeek > 0 && minWeekOffset === 0 && monthOffset > 0) {
             setMinWeekOffset(monthOffset);
         }
     };
 
-    const loadWeekBookings = async (days) => {
+    const loadWeekBookings = async (days, selectedTutorId) => {
         const {
             data: { user },
         } = await supabase.auth.getUser();
+
+        if (user) await loadCreditBalance(user.id);
 
         if (!user) return;
 
@@ -341,6 +407,7 @@ export default function BookPage() {
             .from("bookings")
             .select("id, session_date, start_time, end_time, status, student_id")
             .eq("parent_id", user.id)
+            .eq("tutor_id", selectedTutorId)
             .in("session_date", dayIsos);
 
         if (error) {
@@ -356,31 +423,31 @@ export default function BookPage() {
         setBookingsByDate(myMap);
 
         // 2) OTHER parents’ bookings for the same tutor/week (grey, no details)
-        const { data: tutor } = await supabase
-            .from("tutors")
-            .select("id")
-            .eq("is_active", true)
-            .single();
-
-        if (!tutor?.id) {
+        if (!selectedTutorId) {
             setOtherBookingsByDate({});
             return;
         }
 
         const { data: other, error: otherErr } = await supabase
-            .from("bookings")
-            .select("id, session_date, start_time, end_time, status")
-            .eq("tutor_id", tutor.id)
-            .neq("parent_id", user.id)
+            .from("booking_busy_blocks")
+            .select("session_date, start_time, end_time, status")
+            .eq("tutor_id", selectedTutorId)
             .in("session_date", dayIsos);
 
+        if (process.env.NODE_ENV !== "production") {
+            console.log("busy blocks rows:", other?.length, other);
+        }
+
+
         if (otherErr) {
+            console.error("booking_busy_blocks error:", otherErr);
+            setMessage(`busy blocks error: ${otherErr.message}`);
             setOtherBookingsByDate({});
             return;
         }
 
         const otherMap = {};
-        for (const b of (other || []).filter((b) => !["cancelled", "deleted"].includes(String(b.status || "").toLowerCase()))) {
+        for (const b of (other || [])) {
             if (!otherMap[b.session_date]) otherMap[b.session_date] = [];
             otherMap[b.session_date].push(b);
         }
@@ -412,6 +479,8 @@ export default function BookPage() {
             data: { user },
         } = await supabase.auth.getUser();
 
+        if (user) await loadCreditBalance(user.id);
+
         if (!user) {
             router.push("/auth/sign-in");
             return;
@@ -437,9 +506,16 @@ export default function BookPage() {
             }
         }
 
+        if (!selectedTutorId) {
+            setMessage("Please select a tutor first.");
+            setRequestingKey("");
+            return;
+        }
+
         const { data: tutor, error: tutorError } = await supabase
             .from("tutors")
             .select("id")
+            .eq("id", selectedTutorId)
             .eq("is_active", true)
             .single();
 
@@ -470,6 +546,7 @@ export default function BookPage() {
                 tutor_id: tutor.id,
                 parent_id: user.id,
                 student_id: selectedStudentId,
+                subject_id: selectedSubjectId || null,
                 term_id: term.id,
                 day_of_week: dayOfWeek,
                 start_time: minutesToTime(slot.start),
@@ -520,6 +597,7 @@ export default function BookPage() {
                 tutor_id: tutor.id,
                 parent_id: user.id,
                 student_id: selectedStudentId,
+                subject_id: selectedSubjectId || null,
                 session_date: iso,
                 start_time: minutesToTime(slot.start),
                 end_time: minutesToTime(slot.end),
@@ -554,6 +632,28 @@ export default function BookPage() {
             setRequestingKey("");
             return;
         }
+
+        await logAudit({
+            action: "booking.series_created",
+            entityType: "recurring_group",
+            entityId: group.id,
+            metadata: {
+                tutor_id: tutor.id,
+                parent_id: user.id,
+                student_id: selectedStudentId,
+                subject_id: selectedSubjectId || null,
+                term_id: term.id,
+                generated_count: bookingsToInsert.length,
+                first_date: sessionDate,
+                last_date: term.end_date,
+                start_time: minutesToTime(slot.start),
+                end_time: minutesToTime(slot.end),
+                lesson_mode: lessonMode === "in_person" ? "in_person" : "online",
+                payment_method: "bank_transfer",
+                payment_status: "unpaid",
+                is_recurring: true,
+            },
+        });
 
         const studentName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
 
@@ -599,14 +699,23 @@ export default function BookPage() {
             data: { user },
         } = await supabase.auth.getUser();
 
+        if (user) await loadCreditBalance(user.id);
+
         if (!user) {
             router.push("/auth/sign-in");
+            return;
+        }
+
+        if (!selectedTutorId) {
+            setMessage("Please select a tutor first.");
+            setRequestingKey("");
             return;
         }
 
         const { data: tutor, error: tutorError } = await supabase
             .from("tutors")
             .select("id")
+            .eq("id", selectedTutorId)
             .eq("is_active", true)
             .single();
 
@@ -642,28 +751,56 @@ export default function BookPage() {
         const travel = lessonMode === "in_person" ? (priceQuote?.travel ?? 0) : 0;
         const total = lessonMode === "in_person" ? (priceQuote?.total ?? base) : base;
 
-        const { error } = await supabase.from("bookings").insert({
-            tutor_id: tutor.id,
-            parent_id: user.id,
-            student_id: selectedStudentId,
-            session_date: sessionDate,
-            start_time: minutesToTime(slot.start),
-            end_time: minutesToTime(slot.end),
+        // const { error } = await supabase.from("bookings").insert({
+        //     tutor_id: tutor.id,
+        //     parent_id: user.id,
+        //     student_id: selectedStudentId,
+        //     session_date: sessionDate,
+        //     start_time: minutesToTime(slot.start),
+        //     end_time: minutesToTime(slot.end),
 
-            lesson_mode: lessonMode === "in_person" ? "in_person" : "online",
-            booking_address_text: lessonMode === "in_person" ? (bookingAddress || "").trim() : null,
+        //     lesson_mode: lessonMode === "in_person" ? "in_person" : "online",
+        //     booking_address_text: lessonMode === "in_person" ? (bookingAddress || "").trim() : null,
 
-            status: "requested",
-            is_recurring: false,
-            notes: modalNotes || null,
+        //     status: "requested",
+        //     is_recurring: false,
+        //     notes: modalNotes || null,
 
-            payment_status: "unpaid",
-            payment_method: "bank_transfer",
+        //     payment_status: "unpaid",
+        //     payment_method: "bank_transfer",
 
-            amount_base: base,
-            amount_travel: travel,
-            amount_total: total,
-        });
+        //     amount_base: base,
+        //     amount_travel: travel,
+        //     amount_total: total,
+        // });
+
+        const { data: newBooking, error } = await supabase
+            .from("bookings")
+            .insert({
+                tutor_id: tutor.id,
+                parent_id: user.id,
+                student_id: selectedStudentId,
+                subject_id: selectedSubjectId || null,
+                session_date: sessionDate,
+                start_time: minutesToTime(slot.start),
+                end_time: minutesToTime(slot.end),
+
+                lesson_mode: lessonMode === "in_person" ? "in_person" : "online",
+                booking_address_text: lessonMode === "in_person" ? (bookingAddress || "").trim() : null,
+
+                status: "requested",
+                is_recurring: false,
+                notes: modalNotes || null,
+
+                payment_status: "unpaid",
+                payment_method: "bank_transfer",
+
+                amount_base: base,
+                amount_travel: travel,
+                amount_total: total,
+            })
+            .select("id")
+            .single();
 
         if (error) {
             setMessage(error.message);
@@ -671,10 +808,33 @@ export default function BookPage() {
             return;
         }
 
+        await logAudit({
+            action: "booking.created",
+            entityType: "booking",
+            entityId: newBooking.id,
+            metadata: {
+                tutor_id: tutor.id,
+                parent_id: user.id,
+                student_id: selectedStudentId,
+                subject_id: selectedSubjectId || null,
+                session_date: sessionDate,
+                start_time: minutesToTime(slot.start),
+                end_time: minutesToTime(slot.end),
+                lesson_mode: lessonMode === "in_person" ? "in_person" : "online",
+                amount_base: base,
+                amount_travel: travel,
+                amount_total: total,
+                payment_method: "bank_transfer",
+                payment_status: "unpaid",
+                is_recurring: false,
+            },
+        });
+
         // show a friendly popup instead of a wall-of-text message
         const studentName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
 
         setPaymentPopup({
+            bookingId: newBooking.id,
             studentName,
             sessionDate,
             paymentStatus: "unpaid",
@@ -684,6 +844,7 @@ export default function BookPage() {
             amountTravel: travel,
             amountTotal: total,
         });
+
 
         setMessage("Booking requested."); // keep message short (or set to "" if you prefer)
         setRequestingKey("");
@@ -696,6 +857,8 @@ export default function BookPage() {
             const {
                 data: { user },
             } = await supabase.auth.getUser();
+
+            if (user) await loadCreditBalance(user.id);
 
             if (!user) {
                 router.push("/auth/sign-in");
@@ -728,10 +891,46 @@ export default function BookPage() {
                 setMessage(kidsError.message);
             } else {
                 setStudents(kids || []);
-                if (kids && kids.length > 0) setSelectedStudentId(kids[0].id);
+
+                // Wizard behaviour: do NOT auto-select.
+                // Parent must choose student -> subject -> tutor.
+                setSelectedStudentId("");
             }
 
+            const { data: tutorRows, error: tutorErr } = await supabase
+                .from("tutors")
+                .select("id, display_name")
+                .eq("is_active", true)
+                .order("display_name", { ascending: true });
 
+            if (tutorErr) setMessage(tutorErr.message);
+            setTutors(tutorRows || []);
+
+            // Wizard behaviour: do NOT auto-select
+            setSelectedTutorId("");
+
+            const { data: subjectRows, error: subjectErr } = await supabase
+                .from("subjects")
+                .select("id, name")
+                .order("name", { ascending: true });
+
+            if (subjectErr) setMessage(subjectErr.message);
+            setSubjects(subjectRows || []);
+
+            // Wizard behaviour: do NOT auto-select
+            setSelectedSubjectId("");
+
+            const { data: tsRows, error: tsErr } = await supabase
+                .from("tutor_subjects")
+                .select("tutor_id, subject_id");
+
+            if (tsErr) setMessage(tsErr.message);
+            const tsMap = {};
+            for (const r of (tsRows || [])) {
+                if (!tsMap[r.tutor_id]) tsMap[r.tutor_id] = [];
+                tsMap[r.tutor_id].push(r.subject_id);
+            }
+            setTutorSubjects(tsMap);
 
             const { data: termRows, error: termError } = await supabase
                 .from("terms")
@@ -789,10 +988,11 @@ export default function BookPage() {
     // }, [monthOffset, checking, parentId]);
 
     useEffect(() => {
-        loadWeekSlots(weekDays);
-        loadWeekBookings(weekDays);
+        if (!selectedTutorId) return;
+        loadWeekSlots(weekDays, selectedTutorId);
+        loadWeekBookings(weekDays, selectedTutorId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [monthOffset]);
+    }, [monthOffset, selectedTutorId]);
 
     useEffect(() => {
         if (checking) return;
@@ -805,834 +1005,386 @@ export default function BookPage() {
 
     if (checking) return <p style={{ padding: 32 }}>Checking access...</p>;
 
+    /**
+ * When a calendar cell is clicked, open the BookingModal.
+ * We keep the modal logic in one place so both wizard and calendar behave the same.
+ */
+    const handleCellClick = ({ date, start }) => {
+        setSelectedCell({ date, start });
+        setModalDuration(60);
+        setModalNotes("");
+    };
+
     return (
         <main style={{ maxWidth: 720, margin: "0 auto", padding: 32 }}>
-            <h1>Book a lesson</h1>
+            {/* <h1>Book a lesson</h1>
 
-            <p style={{ color: "#555" }}>
-                Tap a white block to request a booking. Grey blocks are unavailable.
-            </p>
+            <p style={{ color: "#555", lineHeight: "1.6" }}>
+                Tap a white block to request a booking.
+                <br />
+                <span style={{ color: "#999", fontWeight: 600 }}>■ Grey</span> blocks are unavailable.
+                <br />
+                <span style={{ color: "#6F42C1", fontWeight: 600 }}>■ Purple</span> blocks are <u><strong>other</strong></u> student bookings.
+                <br />
+                <span style={{ color: "#e0d42d", fontWeight: 600 }}>■ Yellow</span> blocks are <u><strong>your</strong></u> requested bookings.
+                <br />
+                <span style={{ color: "#2e7d32", fontWeight: 600 }}>■ Green</span> blocks are <u><strong>your</strong></u> bookings.
+            </p> */}
 
             {/* Payment popup (after booking request) */}
-            {paymentPopup && (
-                <div
-                    style={{
-                        position: "fixed",
-                        left: 0,
-                        top: 0,
-                        right: 0,
-                        bottom: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: "rgba(0,0,0,0.35)",
-                        zIndex: 10000,
-                        padding: 16,
-                    }}
-                    onClick={() => setPaymentPopup(null)}
-                >
-                    <div
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                            width: "100%",
-                            maxWidth: 520,
-                            background: "#fff",
-                            borderRadius: 12,
-                            padding: 18,
-                            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-                        }}
-                    >
-                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                            <div>
-                                <div style={{ fontSize: 16, fontWeight: 900 }}>Booking requested</div>
-                                <div style={{ marginTop: 4, color: "#555", fontSize: 13 }}>
-                                    {paymentPopup.studentName ? `${paymentPopup.studentName} • ` : ""}
-                                    {paymentPopup.sessionDate ? formatISO(paymentPopup.sessionDate) : ""}
-                                </div>
-                            </div>
+            <PaymentPopup
+                payment={paymentPopup}
+                creditBalance={creditBalance}
+                onPayWithCredit={async (bookingId) => {
+                    try {
+                        const { data, error } = await supabase.rpc("pay_booking_with_credit", {
+                            p_booking_id: bookingId,
+                        });
+                        if (error) throw new Error(error.message);
 
-                            <button
-                                onClick={() => setPaymentPopup(null)}
-                                style={{
-                                    border: "1px solid #eee",
-                                    background: "#fff",
-                                    borderRadius: 10,
-                                    padding: "6px 10px",
-                                    cursor: "pointer",
-                                    fontWeight: 800,
-                                }}
-                                aria-label="Close payment popup"
-                            >
-                                ✕
-                            </button>
-                        </div>
+                        await logAudit({
+                            action: "payment.paid_with_credit",
+                            entityType: "booking",
+                            entityId: bookingId,
+                            metadata: {
+                                amount_spent: data?.amount_spent,
+                                ledger_id: data?.ledger_id,
+                            },
+                        });
 
-                        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12, fontWeight: 900, border: "1px solid #ffe0a3", background: "#fff7e6", color: "#8a5a00" }}>
-                                UNPAID
-                            </span>
-                            <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12, fontWeight: 900, border: "1px solid #cdd9ff", background: "#e9eefc", color: "#1f7aea" }}>
-                                Bank transfer
-                            </span>
-                        </div>
+                        setMessage(`Paid with credit: $${Number(data?.amount_spent ?? 0).toFixed(2)} NZD`);
 
-                        {typeof paymentPopup.amountTotal === "number" && (
-                            <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
-                                <div style={{ fontWeight: 900 }}>Total to pay</div>
-                                <div style={{ marginTop: 6, fontSize: 16, fontWeight: 900 }}>${paymentPopup.amountTotal}</div>
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (user) {
+                            await Promise.all([
+                                loadCreditBalance(user.id),
+                                loadWeekBookings(weekDays, selectedTutorId),
+                            ]);
+                        }
 
-                                <div style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
-                                    ${paymentPopup.amountBase} (base)
-                                    {paymentPopup.lessonMode === "in_person" ? ` + $${paymentPopup.amountTravel} (travel)` : ""}
-                                </div>
-                            </div>
-                        )}
-
-                        <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fafafa" }}>
-                            <div style={{ fontWeight: 900 }}>Bank transfer</div>
-                            <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "120px 1fr", rowGap: 6, columnGap: 10, fontSize: 14 }}>
-                                <div style={{ color: "#666", fontWeight: 800 }}>Account</div>
-                                <div style={{ fontWeight: 900 }}>00-0000-0000000-00</div>
-
-                                <div style={{ color: "#666", fontWeight: 800 }}>Reference</div>
-                                <div style={{ fontWeight: 900 }}>
-                                    {(paymentPopup.studentName || "Student") + (paymentPopup.sessionDate ? ` ${paymentPopup.sessionDate}` : "")}
-                                </div>
-                            </div>
-
-                            <div style={{ marginTop: 10, color: "#555", fontSize: 13 }}>
-                                After payment, the tutor will mark the booking as <strong>PAID</strong>.
-                            </div>
-                        </div>
-
-                        <div style={{ marginTop: 10, color: "#555", fontSize: 13 }}>
-                            Cash in person is also possible <strong>if agreed</strong>.
-                        </div>
-
-                        <div style={{ marginTop: 14, display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        const text = buildPaymentCopyText(paymentPopup);
-                                        await navigator.clipboard.writeText(text);
-                                        setMessage("Payment details copied.");
-                                    } catch {
-                                        setMessage("Could not copy. Please copy manually.");
-                                    }
-                                }}
-                                style={{
-                                    border: "1px solid #ddd",
-                                    background: "#fff",
-                                    borderRadius: 10,
-                                    padding: "10px 12px",
-                                    cursor: "pointer",
-                                    fontWeight: 900,
-                                }}
-                            >
-                                Copy payment details
-                            </button>
-
-                            <button
-                                onClick={() => setPaymentPopup(null)}
-                                style={{
-                                    border: "none",
-                                    background: "#1f7aea",
-                                    color: "#fff",
-                                    borderRadius: 10,
-                                    padding: "10px 12px",
-                                    cursor: "pointer",
-                                    fontWeight: 900,
-                                }}
-                            >
-                                Done
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                        setPaymentPopup(null);
+                    } catch (e) {
+                        setMessage(e?.message || "Could not pay with credit.");
+                    }
+                }}
+                formatISO={formatISO}
+                buildPaymentCopyText={buildPaymentCopyText}
+                onClose={() => setPaymentPopup(null)}
+                onStartPoliPay={async (bookingId) => { /* unchanged */ }}
+                onCopied={() => setMessage("Payment details copied.")}
+                onCopyFailed={() => setMessage("Could not copy. Please copy manually.")}
+            />
 
             {/* Modal: minimal booking editor */}
-            {
-                selectedCell && (
-                    <div
-                        style={{
-                            position: "fixed",
-                            left: 0,
-                            top: 0,
-                            right: 0,
-                            bottom: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            background: "rgba(0,0,0,0.35)",
-                            zIndex: 9999,
-                        }}
-                        onClick={() => setSelectedCell(null)}
-                    >
-                        <div
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                                background: "#fff",
-                                padding: 20,
-                                borderRadius: 8,
-                                minWidth: 340,
-                            }}
-                        >
-                            <h3 style={{ marginTop: 0 }}>
-                                Book {formatISO(selectedCell.date)} | {minutesToTime(selectedCell.start)} – {minutesToTime(selectedCell.start + modalDuration)}
-                            </h3>
+            <BookingModal
+                open={!!selectedCell}
+                selectedCell={selectedCell}
+                formatISO={formatISO}
+                minutesToTime={minutesToTime}
+                onClose={() => setSelectedCell(null)}
 
-                            {/* Student selector (inside booking popup) */}
-                            <div style={{ marginTop: 10 }}>
-                                <div style={{ fontWeight: 900, marginBottom: 8 }}>Student</div>
+                // Student selection
+                students={students}
+                selectedStudentId={selectedStudentId}
+                onSelectStudent={(studentId) => {
+                    setSelectedStudentId(studentId);
 
-                                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                    {students.map((s) => {
-                                        const selected = selectedStudentId === s.id;
-                                        const initials =
-                                            (s.full_name || "")
-                                                .trim()
-                                                .split(/\s+/)
-                                                .slice(0, 2)
-                                                .map((p) => (p[0] || "").toUpperCase())
-                                                .join("") || "?";
+                    // Business rule: switching student may change base price
+                    setDriveMinutes(null);
+                    setPriceQuote(null);
+                    setPricingError("");
+                }}
 
-                                        return (
-                                            <button
-                                                key={s.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setSelectedStudentId(s.id);
-                                                    // switching student can change base price
-                                                    setDriveMinutes(null);
-                                                    setPriceQuote(null);
-                                                    setPricingError("");
-                                                }}
-                                                style={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: 10,
-                                                    padding: "10px 12px",
-                                                    borderRadius: 12,
-                                                    border: selected ? "2px solid #1f7aea" : "1px solid #ddd",
-                                                    background: selected ? "#f3f7ff" : "#fff",
-                                                    cursor: "pointer",
-                                                    fontWeight: 900,
-                                                }}
-                                                aria-pressed={selected}
-                                            >
-                                                <div
-                                                    style={{
-                                                        width: 32,
-                                                        height: 32,
-                                                        borderRadius: 999,
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        background: selected ? "#1f7aea" : "#e9eefc",
-                                                        color: selected ? "#fff" : "#1f7aea",
-                                                        fontWeight: 900,
-                                                        fontSize: 13,
-                                                        flex: "0 0 auto",
-                                                    }}
-                                                >
-                                                    {initials}
-                                                </div>
+                // Duration + notes
+                modalDuration={modalDuration}
+                setModalDuration={setModalDuration}
+                modalNotes={modalNotes}
+                setModalNotes={setModalNotes}
 
-                                                <div style={{ textAlign: "left" }}>
-                                                    <div style={{ lineHeight: 1.1 }}>{s.full_name}</div>
-                                                    {typeof s.year_level !== "undefined" && s.year_level !== null && (
-                                                        <div style={{ marginTop: 4, fontSize: 12, color: "#666", fontWeight: 800 }}>
-                                                            Year {s.year_level}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
+                // Lesson mode + pricing
+                lessonMode={lessonMode}
+                setLessonMode={(mode) => {
+                    setLessonMode(mode);
 
-                                    <a
-                                        href="/parent/students"
-                                        style={{
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            gap: 8,
-                                            padding: "10px 12px",
-                                            borderRadius: 12,
-                                            border: "1px dashed #bbb",
-                                            background: "#fff",
-                                            color: "#1f7aea",
-                                            fontWeight: 900,
-                                            textDecoration: "none",
-                                        }}
-                                    >
-                                        + Add student
-                                    </a>
-                                </div>
-                            </div>
+                    // Business rule: switching mode invalidates pricing quote
+                    setDriveMinutes(null);
+                    setPriceQuote(null);
+                    setPricingError("");
+                }}
+                bookingAddress={bookingAddress}
+                setBookingAddress={(value) => {
+                    setBookingAddress(value);
 
-                            <div style={{ marginTop: 8 }}>
-                                <label style={{ display: "block", marginBottom: 6 }}>Duration</label>
-                                <select
-                                    value={modalDuration}
-                                    onChange={(e) => setModalDuration(Number(e.target.value))}
-                                >
-                                    <option value={60}>60 minutes</option>
-                                    <option value={120}>120 minutes</option>
-                                </select>
-                            </div>
+                    // Business rule: address change invalidates travel calculation
+                    setDriveMinutes(null);
+                    setPriceQuote(null);
+                    setPricingError("");
+                }}
+                pricingLoading={pricingLoading}
+                pricingError={pricingError}
+                priceQuote={priceQuote}
+                driveMinutes={driveMinutes}
+                onCalculatePrice={() => {
+                    const addr = (bookingAddress || "").trim();
 
-                            <div style={{ marginTop: 8 }}>
-                                <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>Lesson type</label>
+                    if (!selectedStudentId) {
+                        setPricingError("Please select a student first.");
+                        return;
+                    }
+                    if (!addr) {
+                        setPricingError("Please enter an address first.");
+                        return;
+                    }
 
-                                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                                    <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                        <input
-                                            type="radio"
-                                            name="lessonMode"
-                                            value="online"
-                                            checked={lessonMode === "online"}
-                                            onChange={() => setLessonMode("online")}
-                                        />
-                                        Online
-                                    </label>
+                    calculateTravelCost(addr);
+                }}
 
-                                    <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                        <input
-                                            type="radio"
-                                            name="lessonMode"
-                                            value="in_person"
-                                            checked={lessonMode === "in_person"}
-                                            onChange={() => setLessonMode("in_person")}
-                                        />
-                                        In person
-                                    </label>
-                                </div>
-                            </div>
+                // Recurring + term
+                isRecurring={isRecurring}
+                setIsRecurring={setIsRecurring}
+                terms={terms}
+                selectedTermId={selectedTermId}
+                setSelectedTermId={setSelectedTermId}
 
-                            {lessonMode === "in_person" && (
-                                <div style={{ marginTop: 10 }}>
-                                    <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>Address</label>
+                // Confirm action (keeps your exact logic)
+                onConfirm={async () => {
+                    if (!selectedStudentId) {
+                        setMessage("Please select a student before confirming.");
+                        return;
+                    }
 
-                                    <input
-                                        value={bookingAddress}
-                                        onChange={(e) => {
-                                            setBookingAddress(e.target.value);
-                                            setDriveMinutes(null);
-                                            setPriceQuote(null);
-                                            setPricingError("");
-                                        }}
-                                        placeholder="Enter your address for an in-person lesson"
-                                        style={{
-                                            width: "100%",
-                                            padding: "10px 12px",
-                                            borderRadius: 8,
-                                            border: "1px solid #ddd",
-                                        }}
-                                    />
+                    if (lessonMode === "in_person" && !priceQuote) {
+                        setMessage("Please calculate the price before confirming an in-person booking.");
+                        return;
+                    }
 
-                                    <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const addr = (bookingAddress || "").trim();
-                                                if (!selectedStudentId) {
-                                                    setPricingError("Please select a student first.");
-                                                    return;
-                                                }
-                                                if (!addr) {
-                                                    setPricingError("Please enter an address first.");
-                                                    return;
-                                                }
-                                                calculateTravelCost(addr);
-                                            }}
-                                            disabled={pricingLoading}
-                                            style={{
-                                                border: "1px solid #ddd",
-                                                background: "#fff",
-                                                borderRadius: 10,
-                                                padding: "10px 12px",
-                                                cursor: pricingLoading ? "wait" : "pointer",
-                                                fontWeight: 900,
-                                            }}
-                                        >
-                                            {pricingLoading ? "Calculating..." : "Calculate price"}
-                                        </button>
+                    const slot = {
+                        start: selectedCell.start,
+                        end: selectedCell.start + modalDuration,
+                    };
 
-                                        {priceQuote && typeof driveMinutes === "number" && (
-                                            <div style={{ fontSize: 13, color: "#333" }}>
-                                                Price:&nbsp;
-                                                <strong>${priceQuote.base}</strong>
-                                                &nbsp;(base)&nbsp;+&nbsp;
-                                                <strong>${driveMinutes}</strong>
-                                                &nbsp;(travel)&nbsp;=&nbsp;
-                                                <strong>${priceQuote.total}</strong>
-                                            </div>
-                                        )}
-                                        {/* <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                                            Travel fee is $1 per driving minute
-                                        </div> */}
+                    if (isRecurring) {
+                        await handleRequestRecurring(selectedCell.date, slot);
+                    } else {
+                        await handleRequestBooking(selectedCell.date, slot);
+                    }
 
-                                    </div>
+                    setSelectedCell(null);
+                }}
+            />
 
-                                    {pricingError && (
-                                        <div style={{ marginTop: 8, color: "#b00020", fontWeight: 800 }}>
-                                            {pricingError}
-                                        </div>
-                                    )}
-
-                                    {priceQuote && (
-                                        <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fafafa" }}>
-                                            <div style={{ fontWeight: 900, marginBottom: 6 }}>Estimated price (UNPAID)</div>
-                                            <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", rowGap: 6, columnGap: 10, fontSize: 14 }}>
-                                                <div style={{ color: "#666", fontWeight: 800 }}>Base lesson</div>
-                                                <div style={{ fontWeight: 900 }}>${priceQuote.base}</div>
-
-                                                <div style={{ color: "#666", fontWeight: 800 }}>Travel fee</div>
-                                                <div style={{ fontWeight: 900 }}>${priceQuote.travel}</div>
-
-                                                <div style={{ color: "#666", fontWeight: 800 }}>Total</div>
-                                                <div style={{ fontWeight: 900 }}>${priceQuote.total}</div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <p style={{ margin: "8px 0 0", color: "#555", fontSize: 13 }}>
-                                        This will be saved to your profile after booking.
-                                    </p>
-                                </div>
-                            )}
-
-                            <div style={{ marginTop: 10 }}>
-                                <label style={{ display: "block", marginBottom: 6 }}>Notes (optional)</label>
-                                <textarea
-                                    value={modalNotes}
-                                    onChange={(e) => setModalNotes(e.target.value)}
-                                    rows={3}
-                                    style={{ width: "100%" }}
-                                />
-                            </div>
-
-
-                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
-                                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={isRecurring}
-                                        onChange={(e) => setIsRecurring(e.target.checked)}
-                                    />
-                                    Recurring weekly (for a term)
-                                </label>
-
-                                {isRecurring && (
-                                    <div style={{ marginTop: 10 }}>
-                                        <label style={{ display: "block", marginBottom: 6 }}>Term</label>
-                                        <select value={selectedTermId} onChange={(e) => setSelectedTermId(e.target.value)}>
-                                            {terms.map((t) => (
-                                                <option key={t.id} value={t.id}>
-                                                    {t.year} - {t.name} ({t.start_date} to {t.end_date})
-                                                </option>
-                                            ))}
-                                        </select>
-
-                                        <p style={{ marginTop: 8, color: "#555" }}>
-                                            Recurring will skip public holidays automatically. You can add extra holiday lessons manually.
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-
-
-                            <div
-                                style={{
-                                    display: "flex",
-                                    gap: 8,
-                                    marginTop: 12,
-                                    justifyContent: "flex-end",
-                                }}
-                            >
-                                <button onClick={() => setSelectedCell(null)}>Cancel</button>
-
-                                <button
-                                    onClick={async () => {
-                                        if (!selectedStudentId) {
-                                            setMessage("Please select a student before confirming.");
-                                            return;
-                                        }
-
-                                        if (lessonMode === "in_person" && !priceQuote) {
-                                            setMessage("Please calculate the price before confirming an in-person booking.");
-                                            return;
-                                        }
-
-                                        const slot = {
-                                            start: selectedCell.start,
-                                            end: selectedCell.start + modalDuration,
-                                        };
-
-                                        if (isRecurring) {
-                                            await handleRequestRecurring(selectedCell.date, slot);
-                                        } else {
-                                            await handleRequestBooking(selectedCell.date, slot);
-                                        }
-
-                                        setSelectedCell(null);
-                                    }}
-                                    style={{
-                                        background: "#1f7aea",
-                                        color: "#fff",
-                                        border: "none",
-                                        padding: "8px 12px",
-                                        borderRadius: 6,
-                                    }}
-                                >
-                                    Confirm booking
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-
-            {students.length === 0 ? (
-                <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12, background: "#fff" }}>
-                    <div style={{ fontWeight: 800 }}>Add a student first</div>
-                    <p style={{ margin: "6px 0 0", color: "#555" }}>
-                        Bookings are made per student, so you’ll need to add at least one.
-                    </p>
-                    <a
-                        href="/parent/students"
-                        style={{ display: "inline-block", marginTop: 10, fontWeight: 800, color: "#1f7aea", textDecoration: "none" }}
-                    >
-                        + Add a student
-                    </a>
+            {/* Booking Wizard */}
+            <div style={{ maxWidth: 980, margin: "0 auto", padding: "18px 14px" }}>
+                <h1 style={{ margin: 0, fontSize: 26, fontWeight: 950 }}>Book a lesson</h1>
+                <div style={{ marginTop: 6, color: "#555", fontWeight: 650 }}>
+                    Follow the steps below. You’ll see the calendar only after choosing a tutor.
                 </div>
-            ) : (
-                <div style={{ marginTop: 14 }}>
-                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Booking for</div>
 
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                        {students.map((s) => {
-                            const selected = selectedStudentId === s.id;
-                            const initials = (s.full_name || "")
-                                .trim()
-                                .split(/\s+/)
-                                .slice(0, 2)
-                                .map((p) => (p[0] || "").toUpperCase())
-                                .join("") || "?";
-
-                            return (
-                                <button
-                                    key={s.id}
-                                    type="button"
-                                    onClick={() => {
-                                        setSelectedStudentId(s.id);
-                                        // Reset in-person price calc if switching students (base price may change)
-                                        setDriveMinutes(null);
-                                        setPriceQuote(null);
-                                        setPricingError("");
-                                    }}
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 10,
-                                        padding: "10px 12px",
-                                        borderRadius: 12,
-                                        border: selected ? "2px solid #1f7aea" : "1px solid #ddd",
-                                        background: selected ? "#f3f7ff" : "#fff",
-                                        cursor: "pointer",
-                                        fontWeight: 900,
-                                    }}
-                                    aria-pressed={selected}
-                                >
-                                    <div
-                                        style={{
-                                            width: 32,
-                                            height: 32,
-                                            borderRadius: 999,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            background: selected ? "#1f7aea" : "#e9eefc",
-                                            color: selected ? "#fff" : "#1f7aea",
-                                            fontWeight: 900,
-                                            fontSize: 13,
-                                            flex: "0 0 auto",
-                                        }}
-                                    >
-                                        {initials}
-                                    </div>
-
-                                    <div style={{ textAlign: "left" }}>
-                                        <div style={{ lineHeight: 1.1 }}>{s.full_name}</div>
-                                        {typeof s.year_level !== "undefined" && s.year_level !== null && (
-                                            <div style={{ marginTop: 4, fontSize: 12, color: "#666", fontWeight: 800 }}>
-                                                Year {s.year_level}
-                                            </div>
-                                        )}
-                                    </div>
-                                </button>
-                            );
-                        })}
-
+                {students.length === 0 ? (
+                    <div style={{ marginTop: 16, padding: 14, border: "1px solid #eee", borderRadius: 16, background: "#fff" }}>
+                        <div style={{ fontWeight: 900 }}>Add a student first</div>
+                        <div style={{ marginTop: 6, color: "#555", fontWeight: 650 }}>
+                            Bookings are made per student, so you’ll need to add at least one.
+                        </div>
                         <a
                             href="/parent/students"
-                            style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 8,
-                                padding: "10px 12px",
-                                borderRadius: 12,
-                                border: "1px dashed #bbb",
-                                background: "#fff",
-                                color: "#1f7aea",
-                                fontWeight: 900,
-                                textDecoration: "none",
-                            }}
+                            style={{ display: "inline-block", marginTop: 10, fontWeight: 900, color: "#1f7aea", textDecoration: "none" }}
                         >
-                            + Add student
+                            + Add a student
                         </a>
                     </div>
-                </div>
-            )}
-
-            <div style={{ marginTop: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <button
-                        onClick={() => setMonthOffset((prev) => Math.max(minWeekOffset, prev - 1))}
-                        disabled={monthOffset <= minWeekOffset}
-                    >
-                        ◀
-                    </button>
-
-                    <div>
-                        Week of {formatISO(weekDays[0].iso)} to {formatISO(weekDays[6].iso)}
-                    </div>
-
-                    <button
-                        onClick={() => setMonthOffset((prev) => Math.min(minWeekOffset + 3, prev + 1))}
-                        disabled={monthOffset >= minWeekOffset + 3}
-                    >
-                        ▶
-                    </button>
-                </div>
-
-                {students.length > 0 && (
-                    <div className="gridScroll" style={{ marginTop: 12, position: "relative" }}>
-                        <div className="gridInner" style={{
-                            display: "grid",
-                            gridTemplateColumns: "80px repeat(7,1fr)",
-                            gap: 1,
-                            border: "1px solid #eee"
-                        }}>
-                            <div style={{ padding: 8, background: "#fafafa" }} />
-
-                            {weekDays.map((d) => (
-                                <div
-                                    key={d.iso}
-                                    style={{ padding: 8, textAlign: "center", fontWeight: 600, cursor: "default" }}
-                                >
-                                    {d.short}
+                ) : (
+                    <div style={{ marginTop: 16, padding: 14, border: "1px solid #eee", borderRadius: 16, background: "#fff" }}>
+                        {/* Step 1 */}
+                        {!selectedStudentId ? (
+                            <>
+                                <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
+                                    Who are you booking for?
                                 </div>
-                            ))}
 
-                            {hours.map((h, row) => (
-                                <React.Fragment key={`${row}-${h}`}>
-                                    <div style={{ padding: 8, textAlign: "right", background: "#fff", color: "#333", fontWeight: 600 }}>
-                                        {String(h).padStart(2, "0")}
+                                <StudentChips
+                                    students={students}
+                                    selectedStudentId={selectedStudentId}
+                                    onSelectStudent={handleSelectStudent}
+                                    addStudentHref="/parent/students"
+                                    showYearLevel={true}
+                                />
+                            </>
+                        ) : null}
+
+                        {/* Step 2 */}
+                        {selectedStudentId && !selectedSubjectId ? (
+                            <>
+                                <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
+                                    What subject?
+                                </div>
+
+                                <SubjectChips
+                                    subjects={subjects}
+                                    selectedSubjectId={selectedSubjectId}
+                                    onSelectSubject={handleSelectSubject}
+                                />
+
+                                <div style={{ marginTop: 12 }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSelectStudent("")}
+                                        style={{
+                                            border: "1px solid #ddd",
+                                            background: "#fff",
+                                            borderRadius: 10,
+                                            padding: "8px 10px",
+                                            fontWeight: 900,
+                                            cursor: "pointer",
+                                        }}
+                                    >
+                                        Back
+                                    </button>
+                                </div>
+                            </>
+                        ) : null}
+
+                        {/* Step 3 */}
+                        {selectedStudentId && selectedSubjectId && !selectedTutorId ? (
+                            <>
+                                <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
+                                    Choose a tutor for this subject
+                                </div>
+
+                                <TutorCards
+                                    tutorsToShow={getTutorsForSubject(selectedSubjectId)}
+                                    selectedTutorId={selectedTutorId}
+                                    onSelectTutor={handleSelectTutor}
+                                />
+
+                                <div style={{ marginTop: 12 }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedSubjectId("")}
+                                        style={{
+                                            border: "1px solid #ddd",
+                                            background: "#fff",
+                                            borderRadius: 10,
+                                            padding: "8px 10px",
+                                            fontWeight: 900,
+                                            cursor: "pointer",
+                                        }}
+                                    >
+                                        Back
+                                    </button>
+                                </div>
+                            </>
+                        ) : null}
+
+                        {/* Step 4 */}
+                        {selectedStudentId && selectedSubjectId && selectedTutorId ? (
+                            <>
+                                <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
+                                    Pick a time from the tutor’s calendar
+                                </div>
+
+                                <div style={{ marginBottom: 10, color: "#555", fontWeight: 650 }}>
+                                    Student: <b>{getSelectedStudent()?.full_name || "Selected"}</b>
+                                </div>
+
+                                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedTutorId("")}
+                                        style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
+                                    >
+                                        Change tutor
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedSubjectId("")}
+                                        style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
+                                    >
+                                        Change subject
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSelectStudent("")}
+                                        style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
+                                    >
+                                        Change student
+                                    </button>
+                                </div>
+
+                                {/* <LessonModeToggle
+                                    lessonMode={lessonMode}
+                                    onChangeMode={setLessonMode}
+                                    priceQuote={priceQuote}
+                                    driveMinutes={driveMinutes}
+                                    onCalculatePrice={calculateTravelCost}
+                                /> */}
+
+                                <LessonModeToggle
+                                    lessonMode={lessonMode}
+                                    onChangeMode={setLessonMode}
+                                    bookingAddress={bookingAddress}
+                                    onAddressChange={(addr) => {
+                                        setBookingAddress(addr);
+                                        // Reset the quote when address changes so you don't show stale prices
+                                        setPriceQuote(null);
+                                        setDriveMinutes(null);
+                                        setPricingError("");
+                                    }}
+                                    pricingLoading={pricingLoading}
+                                    pricingError={pricingError}
+                                    priceQuote={priceQuote}
+                                    driveMinutes={driveMinutes}
+                                    onCalculatePrice={calculateTravelCost}
+                                />
+
+
+                                {/* Week navigation stays, but only inside step 4 */}
+                                <div style={{ margin: "12px 0", display: "flex", alignItems: "center", gap: 12 }}>
+                                    <button
+                                        onClick={() => setMonthOffset((prev) => Math.max(minWeekOffset, prev - 1))}
+                                        disabled={monthOffset <= minWeekOffset}
+                                    >
+                                        ◀
+                                    </button>
+
+                                    <div style={{ fontWeight: 850 }}>
+                                        Week of {formatISO(weekDays[0].iso)} to {formatISO(weekDays[6].iso)}
                                     </div>
 
-                                    {weekDays.map((d) => {
-                                        const start00 = h * 60;
-                                        const start30 = start00 + 30;
+                                    <button
+                                        onClick={() => setMonthOffset((prev) => Math.min(minWeekOffset + 3, prev + 1))}
+                                        disabled={monthOffset >= minWeekOffset + 3}
+                                    >
+                                        ▶
+                                    </button>
+                                </div>
 
-                                        const daySlots = slotsByDate[d.iso] || [];
-                                        const isAvailable00 = daySlots.some((s) => s.start === start00);
-                                        const isAvailable30 = daySlots.some((s) => s.start === start30);
-
-                                        const canBook00 = isAvailable00 && !!selectedStudentId;
-                                        const canBook30 = isAvailable30 && !!selectedStudentId;
-
-                                        const dayBookings = bookingsByDate[d.iso] || [];
-                                        const otherDayBookings = otherBookingsByDate[d.iso] || [];
-
-                                        const findOverlapAtMinute = (list, minute) => {
-                                            return (list || []).find((b) => {
-                                                const bs = timeToMinutes(String(b.start_time).slice(0, 5));
-                                                const be = timeToMinutes(String(b.end_time).slice(0, 5));
-                                                if (bs == null || be == null) return false;
-                                                return minute >= bs && minute < be;
-                                            });
-                                        };
-
-                                        const myBooking00 = findOverlapAtMinute(dayBookings, start00);
-                                        const myBooking30 = findOverlapAtMinute(dayBookings, start30);
-                                        const otherBooking00 = findOverlapAtMinute(otherDayBookings, start00);
-                                        const otherBooking30 = findOverlapAtMinute(otherDayBookings, start30);
-
-                                        // must be available, have student selected, AND not already booked by anyone
-                                        const finalCanBook00 = canBook00 && !myBooking00 && !otherBooking00;
-                                        const finalCanBook30 = canBook30 && !myBooking30 && !otherBooking30;
-
-                                        const bucketColours = {
-                                            accepted: { bg: "#DFF7E9", fg: "#0A4B2E" },
-                                            requested: { bg: "#FFF7CC", fg: "#6B4E00" },
-                                            other: { bg: "#E6F0FF", fg: "#0B2E66" },
-                                        };
-
-                                        const getCellColours = ({ isAvailable, myBooking, otherBooking }) => {
-                                            if (myBooking) {
-                                                const bucket = statusToBucket(myBooking.status);
-                                                return bucketColours[bucket] || bucketColours.other;
-                                            }
-                                            if (otherBooking) {
-                                                return { bg: "#E0E0E0", fg: "#555" }; // other parent's booking: grey, no details
-                                            }
-                                            return isAvailable
-                                                ? { bg: "#fff", fg: "#000" }
-                                                : { bg: "#f5f5f5", fg: "#999" };
-                                        };
-
-                                        return (
-                                            <div
-                                                key={`${d.iso}-${h}-${row}`}
-                                                style={{ borderLeft: "1px solid #eee", borderTop: "1px solid #eee", padding: 0 }}
-                                            >
-                                                <div
-                                                    onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
-                                                    onMouseEnter={() => {
-                                                        if (loadingWeek) return;
-                                                        setHoveredRange({ date: d.iso, start: start00, end: start00 + 60 });
-                                                        if (!finalCanBook00) return;
-                                                        setHoverPreview({ date: d.iso, start: start00, end: start00 + 60 });
-                                                    }}
-                                                    onMouseLeave={() => {
-                                                        setHoveredRange(null);
-                                                        setHoverPreview(null);
-                                                    }}
-                                                    onClick={() => {
-                                                        if (!finalCanBook00) return;
-                                                        if (loadingWeek) return;
-                                                        setSelectedCell({ date: d.iso, start: start00 });
-                                                        setModalDuration(60);
-                                                        setModalNotes("");
-                                                    }}
-                                                    style={{
-                                                        height: 22,
-                                                        cursor: isLoading ? "wait" : finalCanBook00 ? "pointer" : "not-allowed",
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        borderBottom: "1px dashed #f0f0f0",
-                                                        background: isLoading
-                                                            ? "#fff"
-                                                            : getCellColours({ isAvailable: isAvailable00, myBooking: myBooking00, otherBooking: otherBooking00 }).bg,
-                                                        color: isLoading
-                                                            ? "#999"
-                                                            : getCellColours({ isAvailable: isAvailable00, myBooking: myBooking00, otherBooking: otherBooking00 }).fg,
-                                                        opacity: isLoading ? 0.6 : 1,
-                                                        outline:
-                                                            hoveredRange &&
-                                                                hoveredRange.date === d.iso &&
-                                                                start00 >= hoveredRange.start &&
-                                                                start00 < hoveredRange.end
-                                                                ? "2px solid #1f7aea"
-                                                                : "none",
-                                                        outlineOffset: -2,
-                                                    }}
-                                                    title={
-                                                        loadingWeek
-                                                            ? "Loading availability..."
-                                                            : myBooking00
-                                                                ? `Your booking (${String(myBooking00.status || "").toLowerCase()})`
-                                                                : otherBooking00
-                                                                    ? "Booked"
-                                                                    : finalCanBook00
-                                                                        ? `Click to book ${d.iso} ${minutesToTime(start00)}`
-                                                                        : "Unavailable"
-                                                    }
-                                                />
-
-                                                <div
-                                                    onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
-                                                    onMouseEnter={() => {
-                                                        if (loadingWeek) return;
-                                                        setHoveredRange({ date: d.iso, start: start30, end: start30 + 60 });
-                                                        if (!finalCanBook30) return;
-                                                        setHoverPreview({ date: d.iso, start: start30, end: start30 + 60 });
-                                                    }}
-                                                    onMouseLeave={() => {
-                                                        setHoveredRange(null);
-                                                        setHoverPreview(null);
-                                                    }}
-                                                    onClick={() => {
-                                                        if (!finalCanBook30) return;
-                                                        if (loadingWeek) return;
-                                                        setSelectedCell({ date: d.iso, start: start30 });
-                                                        setModalDuration(60);
-                                                        setModalNotes("");
-                                                    }}
-                                                    style={{
-                                                        height: 22,
-                                                        cursor: isLoading ? "wait" : finalCanBook30 ? "pointer" : "not-allowed",
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        background: isLoading
-                                                            ? "#fff"
-                                                            : getCellColours({ isAvailable: isAvailable30, myBooking: myBooking30, otherBooking: otherBooking30 }).bg,
-                                                        color: isLoading
-                                                            ? "#999"
-                                                            : getCellColours({ isAvailable: isAvailable30, myBooking: myBooking30, otherBooking: otherBooking30 }).fg,
-                                                        outline:
-                                                            hoveredRange &&
-                                                                hoveredRange.date === d.iso &&
-                                                                start30 >= hoveredRange.start &&
-                                                                start30 < hoveredRange.end
-                                                                ? "2px solid #1f7aea"
-                                                                : "none",
-                                                        outlineOffset: -2,
-                                                    }}
-                                                    title={
-                                                        loadingWeek
-                                                            ? "Loading availability..."
-                                                            : myBooking30
-                                                                ? `Your booking (${String(myBooking30.status || "").toLowerCase()})`
-                                                                : otherBooking30
-                                                                    ? "Booked"
-                                                                    : finalCanBook30
-                                                                        ? `Click to book ${d.iso} ${minutesToTime(start30)}`
-                                                                        : "Unavailable"
-                                                    }
-                                                />
-                                            </div>
-                                        );
-                                    })}
-                                </React.Fragment>
-                            ))}
-                        </div>
-
-                        {hoverPreview && (
-                            <div style={{
-                                position: "fixed",
-                                left: hoverPos.x + 12,
-                                top: hoverPos.y + 12,
-                                background: "#111",
-                                color: "#fff",
-                                padding: "6px 8px",
-                                borderRadius: 6,
-                                fontSize: 13,
-                                zIndex: 9999,
-                                pointerEvents: "none",
-                            }}>
-                                {formatISO(hoverPreview.date)} - {minutesToTime(hoverPreview.start)} - {minutesToTime(hoverPreview.end)}
-                            </div>
-                        )}
+                                <BookingCalendar
+                                    weekDays={weekDays}
+                                    hours={hours}
+                                    slotsByDate={slotsByDate}
+                                    bookingsByDate={bookingsByDate}
+                                    otherBookingsByDate={otherBookingsByDate}
+                                    loadingWeek={loadingWeek}
+                                    selectedStudentId={selectedStudentId}
+                                    formatISO={formatISO}
+                                    minutesToTime={minutesToTime}
+                                    timeToMinutes={timeToMinutes}
+                                    statusToBucket={statusToBucket}
+                                    onCellClick={handleCellClick}
+                                    onHoverRange={setHoveredRange}
+                                />
+                            </>
+                        ) : null}
                     </div>
                 )}
+
+                {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
             </div>
 
-            {message && <p style={{ marginTop: 12 }}>{message}</p>}
+            {/* {message && <p style={{ marginTop: 12 }}>{message}</p>} */}
         </main>
     );
 }

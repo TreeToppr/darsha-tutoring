@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
+import { logAudit } from "../../../lib/auditClient";
 import Link from "next/link";
 
 export default function TutorDashboard() {
@@ -69,6 +70,13 @@ export default function TutorDashboard() {
             return;
         }
 
+        await logAudit({
+            action: newStatus === "accepted" ? "booking.accepted" : "booking.rejected",
+            entityType: "booking",
+            entityId: bookingId,
+            metadata: { new_status: newStatus },
+        });
+
         if (tutorRecord) await loadBookings(tutorRecord.id);
         setUpdatingId("");
     };
@@ -89,6 +97,13 @@ export default function TutorDashboard() {
             setUpdatingId("");
             return;
         }
+
+        await logAudit({
+            action: newStatus === "accepted" ? "booking.series_accepted" : "booking.series_rejected",
+            entityType: "recurring_group",
+            entityId: groupId,
+            metadata: { new_status: newStatus },
+        });
 
         if (tutorRecord) await loadBookings(tutorRecord.id);
         setUpdatingId("");
@@ -114,6 +129,13 @@ export default function TutorDashboard() {
 
                 if (error) throw error;
             }
+
+            await logAudit({
+                action: type === "recurring" ? "payment.series_marked_paid" : "payment.marked_paid",
+                entityType: type === "recurring" ? "recurring_group" : "booking",
+                entityId: bookingOrGroup,
+                metadata: { payment_status: "paid" },
+            });
 
             if (tutorRecord) await loadBookings(tutorRecord.id);
             setMessage("Marked as paid.");
