@@ -135,7 +135,10 @@ export default function BookingsCalendarWeekGrid({
             <style jsx>{`
                 .scrollWrap {
                     width: 100%;
+                    max-width: 100%;
+                    min-width: 0;                 /* helps inside CSS grid/flex parents */
                     overflow-x: auto;
+                    overflow-y: hidden;           /* prevents weird vertical scrollbars */
                     -webkit-overflow-scrolling: touch;
                 }
 
@@ -145,9 +148,10 @@ export default function BookingsCalendarWeekGrid({
                     overflow: hidden;
                     background: #fff;
 
-                    /* Forces a usable minimum width so mobile scroll is pleasant */
+                    /* Keep the calendar readable; mobile users scroll horizontally */
                     min-width: 920px;
                 }
+
 
                 .headerRow {
                     display: grid;

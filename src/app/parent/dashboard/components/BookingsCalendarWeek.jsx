@@ -30,7 +30,19 @@ export default function BookingsCalendarWeek({ bookings, dayStart = "08:00", day
     // const byDate = groupBy(bookings, (b) => b.session_date);
 
     return (
-        <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 16, padding: 16 }}>
+        <div
+            style={{
+                background: "#fff",
+                border: "1px solid #eee",
+                borderRadius: 16,
+                padding: 16,
+
+                // CRITICAL: grid items default to min-width:auto which causes overflow on mobile.
+                // This allows the calendar panel to shrink to the viewport, so the inner scroll works.
+                minWidth: 0,
+                maxWidth: "100%",
+            }}
+        >
             <div style={{ fontWeight: 950, marginBottom: 12 }}>Calendar (week)</div>
 
             <BookingsCalendarWeekGrid
