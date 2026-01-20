@@ -160,6 +160,11 @@ export default function ParentDashboard() {
     const [view, setView] = useState("calendar"); // "calendar" | "list"
     const [selectedBookingId, setSelectedBookingId] = useState(null);
 
+    const calendarBookings = (bookings || []).filter((b) => {
+        const s = String(b?.status || "").toLowerCase();
+        return !["cancelled", "declined", "rejected"].includes(s);
+    });
+
     const handleSignOut = async () => {
         await supabase.auth.signOut();
         router.push("/auth/sign-in");
@@ -619,10 +624,15 @@ export default function ParentDashboard() {
                     </div>
 
                     {view === "calendar" ? (
-                        <BookingsCalendarWeek bookings={bookings} onBookingClick={(bookingId) => {
-                            setSelectedBookingId(bookingId);
-                            setView("list");
-                        }} />
+                        <BookingsCalendarWeek
+                            bookings={calendarBookings}
+                            onBookingClick={(booking) => {
+                                // IMPORTANT: BookingsCalendarWeekGrid passes the whole booking object
+                                // (not just an id), so we extract the id here.
+                                setSelectedBookingId(booking?.id || null);
+                                setView("list");
+                            }}
+                        />
                     ) : (
                         <BookingsList
                             bookings={bookings}
