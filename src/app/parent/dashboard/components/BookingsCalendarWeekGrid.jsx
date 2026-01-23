@@ -34,9 +34,10 @@ export default function BookingsCalendarWeekGrid({
     const endMin = timeToMinutes(dayEnd);
     const totalMinutes = endMin - startMin;
 
-    // ✅ ADD THESE TWO LINES
     const slotMinutes = 30;
     const slotHeight = 34;
+
+
 
     const totalSlots = Math.ceil(totalMinutes / slotMinutes);
 
@@ -112,7 +113,7 @@ export default function BookingsCalendarWeekGrid({
 
 
                                 {/* Booking blocks */}
-                                {dayBookings.map((b) => {
+                                {/* {dayBookings.map((b) => {
                                     const s = timeToMinutes(b.start_time);
                                     const e = timeToMinutes(b.end_time);
                                     const top = Math.max(
@@ -124,7 +125,7 @@ export default function BookingsCalendarWeekGrid({
                                         Math.round((e - s) / slotMinutes) * slotHeight
                                     );
 
-                                    const fallbackTitle = b.students?.full_name || "Student";
+                                    // const fallbackTitle = b.students?.full_name || "Student";
                                     const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
 
                                     const title = getBlockTitle ? getBlockTitle(b) : fallbackTitle;
@@ -152,7 +153,91 @@ export default function BookingsCalendarWeekGrid({
                                         </button>
                                     );
 
+                                })} */}
+
+                                {/* Booking blocks */}
+                                {dayBookings.map((b) => {
+                                    const isGcalBusy = b?.__kind === "gcal_busy";
+
+                                    const s = timeToMinutes(b.start_time);
+                                    const e = timeToMinutes(b.end_time);
+                                    const top = Math.max(
+                                        0,
+                                        Math.round((s - startMin) / slotMinutes) * slotHeight
+                                    );
+                                    const height = Math.max(
+                                        slotHeight,
+                                        Math.round((e - s) / slotMinutes) * slotHeight
+                                    );
+
+                                    const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
+
+                                    // Booking defaults (only used for real bookings)
+                                    const fallbackTitle = b.students?.full_name || "Student";
+
+                                    // Strict semantic separation:
+                                    // - gcal_busy: "Busy", time range only, no student/subject/payment/status, not clickable
+                                    // - bookings: keep existing behaviour
+                                    const title = isGcalBusy
+                                        ? "Busy"
+                                        : (getBlockTitle ? getBlockTitle(b) : fallbackTitle);
+
+                                    const sub = isGcalBusy
+                                        ? timeRange
+                                        : (getBlockSub ? getBlockSub(b) : timeRange);
+
+                                    const meta = isGcalBusy
+                                        ? ""
+                                        : (getBlockMeta
+                                            ? getBlockMeta(b)
+                                            : `${String(b.status || "").toLowerCase()} - ${b.payment_status || "unpaid"}`);
+
+                                    const baseStyle = {
+                                        top: top + 2,
+                                        height: height - 4,
+                                        ...(getBlockStyle ? (getBlockStyle(b) || {}) : {}),
+                                    };
+
+                                    // Visual distinction for Google busy blocks
+                                    const gcalStyle = isGcalBusy
+                                        ? {
+                                            borderStyle: "dashed",
+                                            background: "#f3f4f6",
+                                            cursor: "default",
+                                        }
+                                        : {};
+
+                                    // Google busy blocks must never behave like bookings (no click)
+                                    if (isGcalBusy) {
+                                        return (
+                                            <div
+                                                key={b.id}
+                                                className="block gcalBusy"
+                                                title={`Busy (${timeRange})`}
+                                                style={{ ...baseStyle, ...gcalStyle }}
+                                            >
+                                                <div className="blockTitle">{title}</div>
+                                                <div className="blockSub">{sub}</div>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <button
+                                            key={b.id}
+                                            type="button"
+                                            className="block"
+                                            title={`${title} (${timeRange})`}
+                                            style={baseStyle}
+                                            onClick={() => onBookingClick?.(b)}
+                                        >
+                                            <div className="blockTitle">{title}</div>
+                                            <div className="blockSub">{sub}</div>
+                                            <div className="blockMeta">{meta}</div>
+                                        </button>
+                                    );
                                 })}
+
                             </div>
                         );
                     })}
@@ -261,6 +346,11 @@ export default function BookingsCalendarWeekGrid({
                     cursor: pointer;
                     z-index: 2;
                 }
+
+                .gcalBusy {
+                    pointer-events: none; /* belt-and-braces: never clickable */
+                }
+
 
                 .blockTitle {
                     font-weight: 900;

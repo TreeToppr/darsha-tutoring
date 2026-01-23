@@ -27,6 +27,13 @@ const statusLabel = (s) => {
     return s;
 };
 
+// const onClearGoogleCompare = () => {
+//     setCompareBusy([]);
+//     setGooglePreviewEvents([]);
+//     setGoogleAppliedEvents([]);
+//     setMessage("");
+// };
+
 const statusStyle = (s) => {
     const base = {
         padding: "2px 8px",
@@ -55,6 +62,75 @@ const timeToMinutes = (t) => {
     const mm = Number(s.slice(3, 5));
     return hh * 60 + mm;
 };
+
+// async function fetchGoogleFreeBusy(calendarId, range) {
+//     // range is optional: { timeMinISO, timeMaxISO }
+//     const qs = new URLSearchParams({
+//         calendarId: String(calendarId || ""),
+//     });
+
+//     if (range?.timeMinISO) qs.set("timeMin", range.timeMinISO);
+//     if (range?.timeMaxISO) qs.set("timeMax", range.timeMaxISO);
+
+//     const res = await fetch(`/api/google/calendar/freebusy?${qs.toString()}`, {
+//         method: "GET",
+//         cache: "no-store",
+//     });
+
+//     // Helpful error messages in the UI
+//     if (!res.ok) {
+//         const text = await res.text().catch(() => "");
+//         throw new Error(text || `Google freebusy failed (${res.status})`);
+//     }
+
+//     const data = await res.json();
+
+//     // Expecting: { busy: [{ start, end }, ...] }
+//     return Array.isArray(data?.busy) ? data.busy : [];
+// }
+
+// async function fetchGoogleFreeBusy(calendarId, token, range) {
+//     const qs = new URLSearchParams({
+//         calendarId: String(calendarId || ""),
+//     });
+
+//     if (range?.timeMinISO) qs.set("timeMin", range.timeMinISO);
+//     if (range?.timeMaxISO) qs.set("timeMax", range.timeMaxISO);
+
+//     // const res = await fetch(`/api/google/calendar/freebusy?${qs.toString()}`, {
+//     //     method: "GET",
+//     //     cache: "no-store",
+//     //     headers: token ? { Authorization: `Bearer ${token}` } : {},
+//     // });
+
+//     const { data: sessionRes, error: sessionErr } = await supabase.auth.getSession();
+//     const accessToken = sessionRes?.session?.access_token;
+
+//     if (sessionErr || !accessToken) {
+//         setCompareError("Not signed in");
+//         return;
+//     }
+
+//     const res = await fetch(
+//         `/api/google/calendar/freebusy?calendarId=${encodeURIComponent(selectedCalendarId)}&timeMin=${encodeURIComponent(timeMinISO)}&timeMax=${encodeURIComponent(timeMaxISO)}`,
+//         {
+//             method: "GET",
+//             headers: {
+//                 Authorization: `Bearer ${accessToken}`,
+//             },
+//         }
+//     );
+
+
+//     if (!res.ok) {
+//         const text = await res.text().catch(() => "");
+//         throw new Error(text || `Google freebusy failed (${res.status})`);
+//     }
+
+//     const data = await res.json();
+//     return Array.isArray(data?.busy) ? data.busy : [];
+// }
+
 
 const ymdToInt = (ymd) => {
     // "YYYY-MM-DD" -> YYYYMMDD as number
@@ -140,6 +216,22 @@ const modeStyle = (m) => {
     return { ...base, background: "#e9eefc", borderColor: "#cdd9ff", color: "#1f7aea" };
 };
 
+const toggleBtnStyle = (active) => ({
+    padding: "8px 10px",
+    borderRadius: 12,
+    border: active ? "2px solid #111" : "1px solid #ddd",
+    background: "#fff",
+    fontWeight: 900,
+    cursor: "pointer",
+});
+
+// const token = await getSupabaseAccessToken();
+// if (!token) throw new Error("Not signed in");
+
+// const preview = await fetchGoogleFreeBusy(googleSelected, token);
+// setGooglePreviewEvents(preview);
+
+
 export default function ParentDashboard() {
     const router = useRouter();
     const [checking, setChecking] = useState(true);
@@ -159,11 +251,125 @@ export default function ParentDashboard() {
     // const [view, setView] = useState("both"); // "both" | "profile" | "calendar"
     const [view, setView] = useState("calendar"); // "calendar" | "list"
     const [selectedBookingId, setSelectedBookingId] = useState(null);
+    const [googleCalendars, setGoogleCalendars] = useState([]);
+    const [googleSelected, setGoogleSelected] = useState(null);
+    const [googleConnected, setGoogleConnected] = useState(false);
+    const [compareBusy, setCompareBusy] = useState([]); // busy intervals
+    const [googlePreviewEvents, setGooglePreviewEvents] = useState([]);
+    const [googleAppliedEvents, setGoogleAppliedEvents] = useState([]);
+    const [googlePreviewLoading, setGooglePreviewLoading] = useState(false);
+    const [googlePreviewError, setGooglePreviewError] = useState("");
+
+    const getSupabaseAccessToken = async () => {
+        const { data } = await supabase.auth.getSession();
+        return data?.session?.access_token || null;
+    };
+
+    const onClearGoogleCompare = () => {
+        setCompareBusy([]);
+        setGooglePreviewEvents([]);
+        setGoogleAppliedEvents([]);
+        setGooglePreviewError("");
+        setMessage("");
+    };
+
+    const getWeekRangeISO = (weekOffset = 0, timeZone = "Pacific/Auckland") => {
+        // Matches your BookingsCalendarWeek "week starts Monday" behaviour.
+        const now = new Date();
+
+        const day = now.getDay(); // Sun=0, Mon=1...
+        const diffToMonday = (day === 0 ? -6 : 1) - day;
+
+        const start = new Date(now);
+        start.setDate(now.getDate() + diffToMonday + weekOffset * 7);
+        start.setHours(0, 0, 0, 0);
+
+        const end = new Date(start);
+        end.setDate(start.getDate() + 7);
+        end.setHours(0, 0, 0, 0);
+
+        return {
+            timeMin: start.toISOString(),
+            timeMax: end.toISOString(),
+            timeZone,
+        };
+    };
+
+    const fetchGoogleFreeBusy = async ({ calendarId, weekOffset = 0 }) => {
+        const token = await getSupabaseAccessToken();
+        if (!token) return { busy: [], error: "Not signed in" };
+
+        const { timeMin, timeMax, timeZone } = getWeekRangeISO(
+            weekOffset,
+            profile?.timezone || "Pacific/Auckland"
+        );
+
+        const res = await fetch("/api/google/calendar/freebusy", {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                calendarId,
+                timeMin,
+                timeMax,
+                timeZone,
+            }),
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) return { busy: [], error: json?.error || "FreeBusy failed" };
+
+        return { busy: json.busy || [], error: null };
+    };
+
+
+    const loadGoogleCalendars = async () => {
+        const token = await getSupabaseAccessToken();
+        if (!token) return;
+
+        const res = await fetch("/api/google/calendar/list", {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const json = await res.json();
+        if (res.ok) {
+            const cals = json.calendars || [];
+            setGoogleCalendars(cals);
+            setGoogleConnected(true);
+
+            // Auto-pick primary if nothing selected yet
+            const primary = cals.find((c) => c.primary)?.id || "";
+            setGoogleSelected((prev) => prev || primary || "");
+        } else {
+
+            setGoogleCalendars([]);
+            setGoogleConnected(false);
+        }
+    };
+
+    const startGoogleConnect = async () => {
+        const token = await getSupabaseAccessToken();
+        const res = await fetch("/api/google/oauth/start", {
+            method: "POST",
+            headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ context: "parent_compare" }),
+        });
+        const json = await res.json();
+        if (res.ok && json.url) window.location.href = json.url;
+        else setMessage(json.error || "Could not start Google connect");
+    };
 
     const calendarBookings = (bookings || []).filter((b) => {
         const s = String(b?.status || "").toLowerCase();
         return !["cancelled", "declined", "rejected"].includes(s);
     });
+
+    const calendarBookingsWithCompare = [
+        ...calendarBookings,
+        ...(Array.isArray(googleAppliedEvents) ? googleAppliedEvents : []),
+    ];
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -326,6 +532,79 @@ export default function ParentDashboard() {
 
     };
 
+    const toAucklandParts = (iso) => {
+        const d = new Date(iso);
+        const parts = new Intl.DateTimeFormat("en-NZ", {
+            timeZone: profile?.timezone || "Pacific/Auckland",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+        }).formatToParts(d);
+
+        const get = (t) => parts.find((p) => p.type === t)?.value;
+        const y = get("year");
+        const m = get("month");
+        const day = get("day");
+        const hh = get("hour");
+        const mm = get("minute");
+
+        return {
+            ymd: `${y}-${m}-${day}`,
+            hm: `${hh}:${mm}`,
+        };
+    };
+
+    const googleBusyToCalendarItems = (busy) => {
+        return (busy || []).map((b, idx) => {
+            const s = toAucklandParts(b.start);
+            const e = toAucklandParts(b.end);
+
+            // Handle blocks that cross midnight (rare, but possible):
+            // if date differs, just keep start date for display; your grid logic might need more later.
+            return {
+                __kind: "gcal_busy",
+                id: `gcal-${idx}-${b.start}`,
+                session_date: s.ymd,
+                start_time: s.hm,
+                end_time: e.hm,
+
+                // prevent booking UI from guessing
+                status: "busy",
+                payment_status: null,
+                payment_method: null,
+
+                // provide an explicit label
+                title: "Personal calendar",
+            };
+
+        });
+    };
+
+
+    const onApplyGoogleCompare = async () => {
+        if (!googleSelected) return;
+
+        const { busy, error } = await fetchGoogleFreeBusy({
+            calendarId: googleSelected,
+            weekOffset: 0,
+        });
+
+        if (error) {
+            setCompareBusy([]);
+            setGoogleAppliedEvents([]);
+            setMessage(error);
+            return;
+        }
+
+        setCompareBusy(busy || []);
+        setGoogleAppliedEvents(googleBusyToCalendarItems(busy || []));
+        setMessage("");
+    };
+
+
     useEffect(() => {
         const checkAuth = async () => {
             const {
@@ -351,6 +630,7 @@ export default function ParentDashboard() {
             setProfile(profileData);
 
             await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors(), loadCredits(user.id)]);
+            await loadGoogleCalendars();
             setUserId(user.id);
             setChecking(false);
         };
@@ -367,6 +647,82 @@ export default function ParentDashboard() {
 
         el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, [view, selectedBookingId, bookings]);
+
+    // useEffect(() => {
+    //     if (!googleConnected) return;
+
+    //     if (!googleSelected) {
+    //         setGooglePreviewEvents([]);
+    //         setGooglePreviewError("");
+    //         return;
+    //     }
+
+    //     (async () => {
+    //         try {
+    //             setGooglePreviewLoading(true);
+    //             setGooglePreviewError("");
+
+    //             const preview = await fetchGoogleFreeBusy(googleSelected);
+    //             setGooglePreviewEvents(preview);
+    //         } catch (e) {
+    //             setGooglePreviewEvents([]);
+    //             setGooglePreviewError(e?.message || "Failed to load Google Calendar busy blocks.");
+    //         } finally {
+    //             setGooglePreviewLoading(false);
+    //         }
+    //     })();
+    // }, [googleConnected, googleSelected]);
+
+    // const token = await getSupabaseAccessToken();
+    // if (!token) throw new Error("Not signed in");
+
+    // const preview = await fetchGoogleFreeBusy(googleSelected, token);
+    // setGooglePreviewEvents(preview);
+
+    useEffect(() => {
+        async function logAuthUid() {
+            const { data, error } = await supabase.auth.getSession();
+            console.log("AUTH UID:", data?.session?.user?.id);
+            if (error) console.error("Session error:", error);
+        }
+        logAuthUid();
+    }, []);
+
+
+    useEffect(() => {
+        if (!googleConnected) return;
+
+        if (!googleSelected) {
+            setGooglePreviewEvents([]);
+            setGooglePreviewError("");
+            return;
+        }
+
+        (async () => {
+            try {
+                setGooglePreviewLoading(true);
+                setGooglePreviewError("");
+
+                const { busy, error } = await fetchGoogleFreeBusy({
+                    calendarId: googleSelected,
+                    weekOffset: 0,
+                });
+
+                if (error) {
+                    setGooglePreviewEvents([]);
+                    setGooglePreviewError(error);
+                    return;
+                }
+
+                setGooglePreviewEvents(busy || []);
+            } catch (e) {
+                setGooglePreviewEvents([]);
+                setGooglePreviewError(e?.message || "Failed to load Google Calendar busy blocks.");
+            } finally {
+                setGooglePreviewLoading(false);
+            }
+        })();
+    }, [googleConnected, googleSelected]);
 
     useEffect(() => {
         if (!userId) return;
@@ -591,7 +947,101 @@ export default function ParentDashboard() {
                         <BookingsCalendarWeek bookings={bookings} students={students} />
                     </div> */}
 
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        {!googleConnected ? (
+                            <button type="button" onClick={startGoogleConnect} style={toggleBtnStyle(false)}>
+                                Connect Google Calendar
+                            </button>
+                        ) : (
+                            <>
+                                <div style={{ fontSize: 13, color: "#666", fontWeight: 800 }}>Compare to:</div>
+                                <select
+                                    value={googleSelected || ""}
+                                    onChange={(e) => setGoogleSelected(e.target.value)}
+                                    style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #eee" }}
+                                >
+                                    <option value="">Select a calendar…</option>
+                                    {googleCalendars.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.summary}{c.primary ? " (Primary)" : ""}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {/* {googlePreviewEvents.length > 0 && (
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <button
+                                            onClick={() => setGoogleAppliedEvents(googlePreviewEvents)}
+                                        >
+                                            Apply comparison
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                setGooglePreviewEvents([]);
+                                                setGoogleAppliedEvents([]);
+                                            }}
+                                        >
+                                            Clear comparison
+                                        </button>
+                                    </div>
+                                )} */}
+
+                                {googleSelected ? (
+                                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                        <button
+                                            type="button"
+                                            disabled={googlePreviewLoading}
+                                            onClick={onApplyGoogleCompare}
+                                            style={{
+                                                ...toggleBtnStyle(false),
+                                                background: "#1f7aea",
+                                                borderColor: "#1f7aea",
+                                                color: "#fff",
+                                            }}
+                                        >
+                                            {googlePreviewLoading ? "Loading…" : "Apply"}
+                                        </button>
+
+
+                                        {/* <button
+                                            type="button"
+                                            onClick={() => {
+                                                setGoogleSelected("");
+                                                setGooglePreviewEvents([]);
+                                                setGoogleAppliedEvents([]);
+                                                setGooglePreviewError("");
+                                            }}
+                                            style={toggleBtnStyle(false)}
+                                        >
+                                            Clear
+                                        </button> */}
+
+                                        <button
+                                            type="button"
+                                            onClick={onClearGoogleCompare}
+                                            style={toggleBtnStyle(false)}
+                                        >
+                                            Clear
+                                        </button>
+
+                                        <div style={{ fontSize: 12, color: "#666", fontWeight: 700 }}>
+                                            Preview: {googlePreviewEvents.length} busy block{googlePreviewEvents.length === 1 ? "" : "s"}
+                                            {googleAppliedEvents.length ? ` · Applied: ${googleAppliedEvents.length}` : ""}
+                                        </div>
+
+                                        {googlePreviewError ? (
+                                            <div style={{ fontSize: 12, color: "#b00020", fontWeight: 700 }}>
+                                                {googlePreviewError}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                ) : null}
+                            </>
+                        )}
+                    </div>
                     <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", margin: "8px 0 -6px 0" }}>
+
                         <button
                             onClick={() => setView("calendar")}
                             style={{
@@ -621,15 +1071,40 @@ export default function ParentDashboard() {
                         >
                             List
                         </button>
+
+                        <p
+                            style={{
+                                fontSize: 14,
+                                color: "#1f7aea",
+                                fontWeight: 700,
+                                marginLeft: "auto",
+                            }}
+                        >
+                            Don’t see your calendar? Select one above and click <strong>Apply</strong>.
+                        </p>
+
                     </div>
 
+
                     {view === "calendar" ? (
+                        // <BookingsCalendarWeek
+                        //     // bookings={calendarBookings}
+                        //     bookings={calendarBookingsWithCompare}
+                        //     onBookingClick={(booking) => {
+                        //         // IMPORTANT: BookingsCalendarWeekGrid passes the whole booking object
+                        //         // (not just an id), so we extract the id here.
+                        //         if (booking?.__kind === "gcal_busy") return;
+                        //         setSelectedBookingId(booking?.id || null);
+                        //         setView("list");
+                        //     }}
+                        // />
+
                         <BookingsCalendarWeek
-                            bookings={calendarBookings}
+                            bookings={calendarBookingsWithCompare}
                             onBookingClick={(booking) => {
-                                // IMPORTANT: BookingsCalendarWeekGrid passes the whole booking object
-                                // (not just an id), so we extract the id here.
-                                setSelectedBookingId(booking?.id || null);
+                                if (booking?.__kind === "gcal_busy") return;
+                                if (!booking?.id) return;
+                                setSelectedBookingId(booking.id);
                                 setView("list");
                             }}
                         />
@@ -857,6 +1332,6 @@ export default function ParentDashboard() {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
