@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 // import { sendEmail } from "@/lib/email/resend";
 import { sendEmail } from "../../../../lib/email/resend";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+// import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 
 export async function POST(req) {
     try {
