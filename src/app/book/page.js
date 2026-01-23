@@ -517,7 +517,7 @@ export default function BookPage() {
 
         const { data: tutor, error: tutorError } = await supabase
             .from("tutors")
-            .select("id")
+            .select("id, email, display_name")
             .eq("id", selectedTutorId)
             .eq("is_active", true)
             .single();
@@ -658,6 +658,41 @@ export default function BookPage() {
             },
         });
 
+        const { data: authUserRes } = await supabase.auth.getUser();
+        const parentEmail = authUserRes?.user?.email || "";
+
+        const studentFirstName = (students.find((s) => s.id === selectedStudentId)?.full_name || "")
+            .trim()
+            .split(/\s+/)[0];
+
+        fetch("/api/email/booking-series-requested-parent", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                parentEmail,
+                studentFirstName,
+                tutorName: tutor?.display_name || "",
+                startTime: minutesToTime(slot.start),
+                endTime: minutesToTime(slot.end),
+                generatedCount: bookingsToInsert.length,
+            }),
+        }).catch(() => { });
+
+        if (tutor?.email) {
+            fetch("/api/email/booking-series-requested-tutor", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    tutorEmail: tutor.email,
+                    studentFirstName,
+                    startTime: minutesToTime(slot.start),
+                    endTime: minutesToTime(slot.end),
+                    generatedCount: bookingsToInsert.length,
+                    parentEmail,
+                }),
+            }).catch(() => { });
+        }
+
         const studentName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
 
         const st = students.find((s) => s.id === selectedStudentId) || null;
@@ -717,7 +752,7 @@ export default function BookPage() {
 
         const { data: tutor, error: tutorError } = await supabase
             .from("tutors")
-            .select("id")
+            .select("id, email, display_name")
             .eq("id", selectedTutorId)
             .eq("is_active", true)
             .single();
@@ -835,6 +870,41 @@ export default function BookPage() {
 
         // show a friendly popup instead of a wall-of-text message
         const studentName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
+
+        const { data: authUserRes } = await supabase.auth.getUser();
+        const parentEmail = authUserRes?.user?.email || "";
+
+        const studentFirstName = (students.find((s) => s.id === selectedStudentId)?.full_name || "")
+            .trim()
+            .split(/\s+/)[0];
+
+        fetch("/api/email/booking-requested-parent", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                parentEmail,
+                studentFirstName,
+                sessionDate,
+                startTime: minutesToTime(slot.start),
+                endTime: minutesToTime(slot.end),
+                tutorName: tutor?.display_name || "",
+            }),
+        }).catch(() => { });
+
+        if (tutor?.email) {
+            fetch("/api/email/booking-requested-tutor", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    tutorEmail: tutor.email,
+                    studentFirstName,
+                    sessionDate,
+                    startTime: minutesToTime(slot.start),
+                    endTime: minutesToTime(slot.end),
+                    parentEmail,
+                }),
+            }).catch(() => { });
+        }
 
         setPaymentPopup({
             bookingId: newBooking.id,

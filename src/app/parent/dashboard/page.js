@@ -537,6 +537,47 @@ export default function ParentDashboard() {
 
             const { data: { user } } = await supabase.auth.getUser();
             if (user) await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors(), loadCredits(user.id)]);
+            const { data: authUserRes } = await supabase.auth.getUser();
+            const parentEmail = authUserRes?.user?.email || "";
+
+            const emailRes = await fetch("/api/email/booking-cancelled", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    parentEmail,
+                    studentFirstName: booking?.students?.full_name?.trim()?.split(/\s+/)[0],
+                    sessionDate: booking?.session_date,
+                    startTime: booking?.start_time,
+                    endTime: booking?.end_time,
+                }),
+            });
+
+            const tutorEmail = booking?.tutors?.email || "";
+            if (tutorEmail) {
+                const tutorEmailRes = await fetch("/api/email/lesson-cancelled-tutor", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        tutorEmail,
+                        parentEmail,
+                        studentFirstName: booking?.students?.full_name?.trim()?.split(/\s+/)[0],
+                        sessionDate: booking?.session_date,
+                        startTime: booking?.start_time,
+                        endTime: booking?.end_time,
+                    }),
+                });
+
+                if (!tutorEmailRes.ok) {
+                    const errText = await tutorEmailRes.text().catch(() => "");
+                    console.error("Tutor email send failed:", errText);
+                }
+            }
+
+            if (!emailRes.ok) {
+                const errText = await emailRes.text().catch(() => "");
+                console.error("Email send failed:", errText);
+            }
+
         } finally {
             setUpdatingId("");
         }
@@ -1331,6 +1372,8 @@ export default function ParentDashboard() {
                                         </div>
                                     </>
                                 );
+
+
                             })()}
                         </div>
                     </div>

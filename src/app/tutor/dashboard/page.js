@@ -224,6 +224,47 @@ export default function TutorDashboard() {
         setUpdatingKey(null);
     };
 
+    const cancelBookingAsTutor = async (booking) => {
+        if (!booking?.id) return;
+
+        setMessage("");
+        setUpdatingKey(`cancel-${booking.id}`);
+
+        const { error } = await supabase
+            .from("bookings")
+            .update({ status: "cancelled" })
+            .eq("id", booking.id);
+
+        if (error) {
+            setMessage(error.message);
+            setUpdatingKey(null);
+            return;
+        }
+
+        await logAudit({
+            action: "booking.cancelled_by_tutor",
+            entityType: "booking",
+            entityId: booking.id,
+            metadata: { new_status: "cancelled" },
+        });
+
+        // send emails (parent + tutor) server-side
+        const emailRes = await fetch("/api/email/tutor-cancelled", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bookingId: booking.id }),
+        });
+
+        if (!emailRes.ok) {
+            const errText = await emailRes.text().catch(() => "");
+            console.error("Tutor-cancel email failed:", errText);
+        }
+
+        if (tutorRecord?.id) await loadBookings(tutorRecord.id);
+        setUpdatingKey(null);
+    };
+
+
     const validateBusyDraft = () => {
         if (!tutorRecord?.id) return "Tutor not loaded.";
         if (!busyDraft.date) return "Date is required.";
@@ -526,6 +567,7 @@ export default function TutorDashboard() {
                                 updatingKey={updatingKey}
                                 onAccept={(b) => updateBookingStatus(b.id, "accepted")}
                                 onReject={(b) => updateBookingStatus(b.id, "rejected")}
+                                onCancel={cancelBookingAsTutor}
                                 onAcceptSeries={(b) => updateRecurringGroupStatus(b.recurring_group_id, "accepted")}
                                 onRejectSeries={(b) => updateRecurringGroupStatus(b.recurring_group_id, "rejected")}
                                 onMarkPaid={(b) => markPaid(b.id, null)}

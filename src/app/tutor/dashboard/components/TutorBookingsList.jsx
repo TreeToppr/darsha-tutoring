@@ -87,7 +87,9 @@ export default function TutorBookingsList({
     onRejectSeries,
     onMarkPaid,
     onMarkPaidSeries,
+    onCancel,
 }) {
+
     const rows = Array.isArray(bookings) ? bookings : [];
 
     if (!rows.length) {
@@ -124,6 +126,7 @@ export default function TutorBookingsList({
                     const isRecurring = !!b?.is_recurring && !!b?.recurring_group_id;
                     const canDecide = String(b?.status || "").toLowerCase() === "requested";
                     const canMarkPaid = (b?.payment_status || "unpaid") !== "paid";
+                    const canCancel = String(b?.status || "").toLowerCase() === "accepted";
 
                     return (
                         <div
@@ -258,6 +261,17 @@ export default function TutorBookingsList({
                                             </button>
                                         ) : null}
                                     </>
+                                ) : null}
+
+                                {canCancel ? (
+                                    <button
+                                        type="button"
+                                        style={actionBtnStyle("danger")}
+                                        disabled={updatingKey === `cancel-${b.id}`}
+                                        onClick={() => onCancel?.(b)}
+                                    >
+                                        {updatingKey === `cancel-${b.id}` ? "Cancelling…" : "Cancel"}
+                                    </button>
                                 ) : null}
                             </div>
                         </div>

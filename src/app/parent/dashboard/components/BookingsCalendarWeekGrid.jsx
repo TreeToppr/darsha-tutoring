@@ -337,7 +337,7 @@ export default function BookingsCalendarWeekGrid({
                 .dayCol {
                     position: relative;
                     border-right: 1px solid #eee;
-                    gap: -5;
+                    // gap: -5;
                 }
 
                 .gridLine {
