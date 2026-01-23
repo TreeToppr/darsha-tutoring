@@ -11,10 +11,22 @@ import BookingsCalendarWeekGrid from "./BookingsCalendarWeekGrid";
  * - bookings: array of booking rows (already filtered to this parent)
  * - students: array of student rows (optional, used for fallback matching)
  */
-export default function BookingsCalendarWeek({ bookings, dayStart = "08:00", dayEnd = "20:00", onBookingClick }) {
+export default function BookingsCalendarWeek({
+    bookings,
+    weekOffset = 0,
+    dayStart = "08:00",
+    dayEnd = "20:00",
+    onBookingClick,
+    onEmptySlotClick,
+    getBlockTitle,
+    getBlockSub,
+    getBlockMeta,
+    getBlockStyle,
+}) {
     // Basic "week starts Monday" view
     const now = new Date();
-    const start = startOfWeekMonday(now);
+    // const start = startOfWeekMonday(now);
+    const start = addDays(startOfWeekMonday(now), weekOffset * 7);
     const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
 
     // Convert Date objects into the shape BookingsCalendarWeekGrid expects
@@ -51,6 +63,11 @@ export default function BookingsCalendarWeek({ bookings, dayStart = "08:00", day
                 dayStart={dayStart}
                 dayEnd={dayEnd}
                 onBookingClick={onBookingClick}
+                onEmptySlotClick={onEmptySlotClick}
+                getBlockTitle={getBlockTitle}
+                getBlockSub={getBlockSub}
+                getBlockMeta={getBlockMeta}
+                getBlockStyle={getBlockStyle}
             />
 
         </div>
@@ -156,3 +173,31 @@ function formatDayHeader(d) {
 //     const s = students.find((x) => x.id === sid);
 //     return s?.full_name || "";
 // }
+
+function Panel({ title, children }) {
+    return (
+        <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 16, padding: 16 }}>
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>{title}</div>
+            {children}
+        </div>
+    );
+}
+
+function computeStats(bookings) {
+    const rows = Array.isArray(bookings) ? bookings : [];
+
+    const now = new Date();
+    const todayIso = now.toISOString().slice(0, 10);
+
+    const upcoming = rows.filter((b) => (b?.session_date || "") >= todayIso && (b?.status || "") !== "cancelled");
+    const requested = upcoming.filter((b) => (b?.status || "") === "requested");
+    const unpaid = upcoming.filter((b) => (b?.payment_status || "unpaid") !== "paid");
+
+    // crude "this week": counts bookings in next 7 days
+    const weekEnd = new Date(now);
+    weekEnd.setDate(now.getDate() + 7);
+    const weekEndIso = weekEnd.toISOString().slice(0, 10);
+    const thisWeek = rows.filter((b) => (b?.session_date || "") >= todayIso && (b?.session_date || "") <= weekEndIso);
+
+    return { upcoming: upcoming.length, requested: requested.length, unpaid: unpaid.length, thisWeek: thisWeek.length };
+}

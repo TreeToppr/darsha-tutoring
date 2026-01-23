@@ -19,18 +19,27 @@ function minutesToTime(m) {
  * Mobile: horizontal scroll container (grid keeps readable widths)
  */
 export default function BookingsCalendarWeekGrid({
-    weekDays, // [{ iso, label }]
+    weekDays,
     bookings,
     dayStart = "08:00",
     dayEnd = "20:00",
-    slotMinutes = 30,
-    slotHeight = 22,
-    onBookingClick, // optional (if you want click -> jump to list)
+    onBookingClick,
+    onEmptySlotClick,
+    getBlockTitle,
+    getBlockSub,
+    getBlockMeta,
+    getBlockStyle,
 }) {
     const startMin = timeToMinutes(dayStart);
     const endMin = timeToMinutes(dayEnd);
     const totalMinutes = endMin - startMin;
+
+    // ✅ ADD THESE TWO LINES
+    const slotMinutes = 30;
+    const slotHeight = 34;
+
     const totalSlots = Math.ceil(totalMinutes / slotMinutes);
+
 
     // Group bookings by day
     const byDay = {};
@@ -84,14 +93,23 @@ export default function BookingsCalendarWeekGrid({
 
                         return (
                             <div key={d.iso} className="dayCol" style={{ height: totalSlots * slotHeight }}>
-                                {/* Grid lines */}
-                                {Array.from({ length: totalSlots }).map((_, i) => (
-                                    <div
-                                        key={i}
-                                        className="gridLine"
-                                        style={{ height: slotHeight }}
-                                    />
-                                ))}
+                                {/* Clickable empty slots */}
+                                {Array.from({ length: totalSlots }).map((_, i) => {
+                                    const mins = startMin + i * slotMinutes;
+                                    const slotTime = minutesToTime(mins);
+
+                                    return (
+                                        <button
+                                            key={i}
+                                            type="button"
+                                            className="gridSlot"
+                                            style={{ height: slotHeight }}
+                                            onClick={() => onEmptySlotClick?.({ date: d.iso, time: slotTime })}
+                                            aria-label={`Add busy block ${d.iso} ${slotTime}`}
+                                        />
+                                    );
+                                })}
+
 
                                 {/* Booking blocks */}
                                 {dayBookings.map((b) => {
@@ -106,25 +124,34 @@ export default function BookingsCalendarWeekGrid({
                                         Math.round((e - s) / slotMinutes) * slotHeight
                                     );
 
-                                    const studentName = b.students?.full_name || "Student";
+                                    const fallbackTitle = b.students?.full_name || "Student";
                                     const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
+
+                                    const title = getBlockTitle ? getBlockTitle(b) : fallbackTitle;
+                                    const sub = getBlockSub ? getBlockSub(b) : timeRange;
+                                    const meta = getBlockMeta
+                                        ? getBlockMeta(b)
+                                        : `${String(b.status || "").toLowerCase()} - ${b.payment_status || "unpaid"}`;
 
                                     return (
                                         <button
                                             key={b.id}
                                             type="button"
                                             className="block"
-                                            title={`${studentName} (${timeRange})`}
-                                            style={{ top: top + 2, height: height - 4 }}
+                                            title={`${title} (${timeRange})`}
+                                            style={{
+                                                top: top + 2,
+                                                height: height - 4,
+                                                ...(getBlockStyle ? (getBlockStyle(b) || {}) : {}),
+                                            }}
                                             onClick={() => onBookingClick?.(b)}
                                         >
-                                            <div className="blockTitle">{studentName}</div>
-                                            <div className="blockSub">{timeRange}</div>
-                                            <div className="blockMeta">
-                                                {String(b.status || "").toLowerCase()} - {b.payment_status || "unpaid"}
-                                            </div>
+                                            <div className="blockTitle">{title}</div>
+                                            <div className="blockSub">{sub}</div>
+                                            <div className="blockMeta">{meta}</div>
                                         </button>
                                     );
+
                                 })}
                             </div>
                         );
@@ -204,6 +231,22 @@ export default function BookingsCalendarWeekGrid({
                     border-bottom: 1px dashed #f0f0f0;
                 }
 
+                .gridSlot {
+                    width: 100%;
+                    border: none;
+                    background: transparent;
+                    padding: 0;
+                    margin: 0;
+                    cursor: pointer;
+                    border-bottom: 1px dashed #f0f0f0;
+                    z-index: 1;
+                    position: relative;
+                }
+
+                .gridSlot:hover {
+                    background: #fafafa;
+                }
+
                 .block {
                     position: absolute;
                     left: 6px;
@@ -216,6 +259,7 @@ export default function BookingsCalendarWeekGrid({
                     overflow: hidden;
                     text-align: left;
                     cursor: pointer;
+                    z-index: 2;
                 }
 
                 .blockTitle {

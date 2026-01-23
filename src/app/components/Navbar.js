@@ -114,7 +114,7 @@ export default function Navbar() {
             return [
                 ...base,
                 { href: "/tutor/dashboard", label: "Dashboard" },
-                { href: "/tutor/availability", label: "Availability" },
+                { href: "/tutor/profile", label: "Profile" },
             ];
         }
 
