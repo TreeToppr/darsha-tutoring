@@ -360,7 +360,7 @@ export default function BookingsCalendarWeekGrid({
                     box-sizing: border-box;
                 }
 
-                .gridSlot:hover {
+                .gridSlot:hover { 
                     background: #fafafa;
                 }
 
