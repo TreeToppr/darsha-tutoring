@@ -14,6 +14,8 @@ import BookingsCalendarWeekGrid from "./BookingsCalendarWeekGrid";
 export default function BookingsCalendarWeek({
     bookings,
     weekOffset = 0,
+    onWeekOffsetChange,
+    maxWeekOffset = 4,
     dayStart = "08:00",
     dayEnd = "20:00",
     onBookingClick,
@@ -23,6 +25,7 @@ export default function BookingsCalendarWeek({
     getBlockMeta,
     getBlockStyle,
 }) {
+
     // Basic "week starts Monday" view
     const now = new Date();
     // const start = startOfWeekMonday(now);
@@ -55,7 +58,58 @@ export default function BookingsCalendarWeek({
                 maxWidth: "100%",
             }}
         >
-            <div style={{ fontWeight: 950, marginBottom: 12 }}>Calendar (week)</div>
+            <div
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    marginBottom: 12,
+                }}
+            >
+                <div style={{ fontWeight: 950 }}>Calendar (week)</div>
+
+                <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+
+                    <button
+                        type="button"
+                        onClick={() => onWeekOffsetChange?.((w) => Math.max(0, w - 1))}
+                        disabled={!onWeekOffsetChange || weekOffset === 0}
+                        style={{
+                            padding: "8px 12px",
+                            borderRadius: 10,
+                            border: "1px solid #ddd",
+                            background: "#fff",
+                            color: "#111",
+                            fontWeight: 800,
+                            cursor: weekOffset === 0 ? "not-allowed" : "pointer",
+                            opacity: weekOffset === 0 ? 0.5 : 1,
+                        }}
+                    >
+                        ← Previous week
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => onWeekOffsetChange?.((w) => Math.min(maxWeekOffset, w + 1))}
+                        disabled={!onWeekOffsetChange || weekOffset >= maxWeekOffset}
+                        style={{
+                            padding: "8px 12px",
+                            borderRadius: 10,
+                            border: "1px solid #ddd",
+                            background: "#fff",
+                            color: "#111",
+                            fontWeight: 800,
+                            cursor: weekOffset >= 4 ? "not-allowed" : "pointer",
+                            opacity: weekOffset >= 4 ? 0.5 : 1,
+                        }}
+                    >
+                        Next week →
+                    </button>
+                </div>
+            </div>
+
+
 
             <BookingsCalendarWeekGrid
                 weekDays={weekDays}

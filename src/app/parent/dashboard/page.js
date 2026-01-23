@@ -250,6 +250,7 @@ export default function ParentDashboard() {
     const [creditLedgerRows, setCreditLedgerRows] = useState([]);
     // const [view, setView] = useState("both"); // "both" | "profile" | "calendar"
     const [view, setView] = useState("calendar"); // "calendar" | "list"
+    const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 4 = 4 weeks ahead (about a month)
     const [selectedBookingId, setSelectedBookingId] = useState(null);
     const [googleCalendars, setGoogleCalendars] = useState([]);
     const [googleSelected, setGoogleSelected] = useState(null);
@@ -264,6 +265,16 @@ export default function ParentDashboard() {
         const { data } = await supabase.auth.getSession();
         return data?.session?.access_token || null;
     };
+
+    useEffect(() => {
+        // Keep week navigation semantically clean:
+        // applied Google blocks are only meaningful for the week they were fetched for
+        setCompareBusy([]);
+        setGooglePreviewEvents([]);
+        setGoogleAppliedEvents([]);
+        setGooglePreviewError("");
+        setMessage("");
+    }, [weekOffset]);
 
     const onClearGoogleCompare = () => {
         setCompareBusy([]);
@@ -589,8 +600,9 @@ export default function ParentDashboard() {
 
         const { busy, error } = await fetchGoogleFreeBusy({
             calendarId: googleSelected,
-            weekOffset: 0,
+            weekOffset,
         });
+
 
         if (error) {
             setCompareBusy([]);
@@ -705,7 +717,7 @@ export default function ParentDashboard() {
 
                 const { busy, error } = await fetchGoogleFreeBusy({
                     calendarId: googleSelected,
-                    weekOffset: 0,
+                    weekOffset,
                 });
 
                 if (error) {
@@ -722,7 +734,7 @@ export default function ParentDashboard() {
                 setGooglePreviewLoading(false);
             }
         })();
-    }, [googleConnected, googleSelected]);
+    }, [googleConnected, googleSelected, weekOffset]);
 
     useEffect(() => {
         if (!userId) return;
@@ -1040,8 +1052,7 @@ export default function ParentDashboard() {
                             </>
                         )}
                     </div>
-                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", margin: "8px 0 -6px 0" }}>
-
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", alignItems: "center", margin: "8px 0 -6px 0", flexWrap: "wrap" }}>
                         <button
                             onClick={() => setView("calendar")}
                             style={{
@@ -1071,6 +1082,42 @@ export default function ParentDashboard() {
                         >
                             List
                         </button>
+                        {/* 
+                        <button
+                            type="button"
+                            onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
+                            disabled={weekOffset === 0}
+                            style={{
+                                padding: "8px 12px",
+                                borderRadius: 10,
+                                border: "1px solid #ddd",
+                                background: "#fff",
+                                color: "#111",
+                                fontWeight: 800,
+                                cursor: weekOffset === 0 ? "not-allowed" : "pointer",
+                                opacity: weekOffset === 0 ? 0.5 : 1,
+                            }}
+                        >
+                            ← Previous week
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setWeekOffset((w) => Math.min(4, w + 1))}
+                            disabled={weekOffset >= 4}
+                            style={{
+                                padding: "8px 12px",
+                                borderRadius: 10,
+                                border: "1px solid #ddd",
+                                background: "#fff",
+                                color: "#111",
+                                fontWeight: 800,
+                                cursor: weekOffset >= 4 ? "not-allowed" : "pointer",
+                                opacity: weekOffset >= 4 ? 0.5 : 1,
+                            }}
+                        >
+                            Next week →
+                        </button> */}
 
                         <p
                             style={{
@@ -1099,8 +1146,21 @@ export default function ParentDashboard() {
                         //     }}
                         // />
 
+                        // <BookingsCalendarWeek
+                        //     bookings={calendarBookingsWithCompare}
+                        //     onBookingClick={(booking) => {
+                        //         if (booking?.__kind === "gcal_busy") return;
+                        //         if (!booking?.id) return;
+                        //         setSelectedBookingId(booking.id);
+                        //         setView("list");
+                        //     }}
+                        // />
+
                         <BookingsCalendarWeek
                             bookings={calendarBookingsWithCompare}
+                            weekOffset={weekOffset}
+                            onWeekOffsetChange={setWeekOffset}
+                            maxWeekOffset={4}
                             onBookingClick={(booking) => {
                                 if (booking?.__kind === "gcal_busy") return;
                                 if (!booking?.id) return;
@@ -1108,6 +1168,7 @@ export default function ParentDashboard() {
                                 setView("list");
                             }}
                         />
+
                     ) : (
                         <BookingsList
                             bookings={bookings}

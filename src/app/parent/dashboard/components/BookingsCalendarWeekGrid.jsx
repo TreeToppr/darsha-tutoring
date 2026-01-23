@@ -161,19 +161,17 @@ export default function BookingsCalendarWeekGrid({
 
                                     const s = timeToMinutes(b.start_time);
                                     const e = timeToMinutes(b.end_time);
-                                    const top = Math.max(
-                                        0,
-                                        Math.round((s - startMin) / slotMinutes) * slotHeight
-                                    );
-                                    const height = Math.max(
-                                        slotHeight,
-                                        Math.round((e - s) / slotMinutes) * slotHeight
-                                    );
+
+                                    // Use exact positioning (not rounding) so 15-min blocks align correctly
+                                    const top = Math.max(0, ((s - startMin) / slotMinutes) * slotHeight);
+                                    const height = Math.max(slotHeight, ((e - s) / slotMinutes) * slotHeight);
+
 
                                     const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
 
                                     // Booking defaults (only used for real bookings)
-                                    const fallbackTitle = b.students?.full_name || "Student";
+                                    const fullName = (b.students?.full_name || "").trim();
+                                    const fallbackTitle = fullName ? fullName.split(/\s+/)[0] : "Student";
 
                                     // Strict semantic separation:
                                     // - gcal_busy: "Busy", time range only, no student/subject/payment/status, not clickable
@@ -193,8 +191,8 @@ export default function BookingsCalendarWeekGrid({
                                             : `${String(b.status || "").toLowerCase()} - ${b.payment_status || "unpaid"}`);
 
                                     const baseStyle = {
-                                        top: top + 2,
-                                        height: height - 4,
+                                        top,
+                                        height,
                                         ...(getBlockStyle ? (getBlockStyle(b) || {}) : {}),
                                     };
 
@@ -254,6 +252,33 @@ export default function BookingsCalendarWeekGrid({
                     -webkit-overflow-scrolling: touch;
                 }
 
+                .timeCol {
+                    position: sticky;
+                    left: 0;
+                    background: #fff;
+                    z-index: 3;
+                }
+
+                // .timeHead {
+                //     position: sticky;
+                //     left: 0;
+                //     background: #fff;
+                //     z-index: 4;
+                // }
+
+                .timeCol {
+                    border-right: 1px solid #eee;
+
+                    position: sticky;
+                    left: 0;
+                    z-index: 5;
+                    background: #fff;
+                }
+
+                .timeCol {
+                    box-shadow: 6px 0 10px rgba(0,0,0,0.03);
+                }
+
                 .gridCard {
                     border: 1px solid #eee;
                     border-radius: 16px;
@@ -305,11 +330,14 @@ export default function BookingsCalendarWeekGrid({
                     font-size: 12px;
                     color: #666;
                     font-weight: 800;
+                    box-sizing: border-box;
                 }
+
 
                 .dayCol {
                     position: relative;
                     border-right: 1px solid #eee;
+                    gap: -5;
                 }
 
                 .gridLine {
@@ -318,14 +346,18 @@ export default function BookingsCalendarWeekGrid({
 
                 .gridSlot {
                     width: 100%;
+                    display: block;
                     border: none;
                     background: transparent;
                     padding: 0;
                     margin: 0;
+                    line-height: 0;
+                    font-size: 0;
                     cursor: pointer;
                     border-bottom: 1px dashed #f0f0f0;
                     z-index: 1;
                     position: relative;
+                    box-sizing: border-box;
                 }
 
                 .gridSlot:hover {
@@ -359,13 +391,13 @@ export default function BookingsCalendarWeekGrid({
                 }
 
                 .blockSub {
-                    margin-top: 4px;
+                    margin-top: 0px;
                     font-size: 12px;
                     color: #555;
                 }
 
                 .blockMeta {
-                    margin-top: 4px;
+                    margin-top: 0px;
                     font-size: 12px;
                     color: #777;
                 }
