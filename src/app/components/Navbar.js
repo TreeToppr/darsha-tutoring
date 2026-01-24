@@ -19,7 +19,7 @@ function NavLink({ href, children, active, onClick }) {
                 fontWeight: active ? 800 : 650,
                 border: "1px solid",
                 borderColor: active ? "#b6d4ff" : "transparent",
-                display: "inline-flex",
+                // display: "inline-flex",
                 alignItems: "center",
                 gap: 8,
             }}
@@ -228,7 +228,7 @@ export default function Navbar() {
                         border: "1px solid #e6e6e6",
                         background: "#fff",
                         cursor: "pointer",
-                        display: "inline-flex",
+                        // display: "inline-flex",
                         alignItems: "center",
                         justifyContent: "center",
                         fontSize: 35,

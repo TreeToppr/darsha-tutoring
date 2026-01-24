@@ -95,6 +95,13 @@ function buildISODate(y, m, d) {
     return `${y}-${pad2(m)}-${pad2(d)}`;
 }
 
+function toISODateLocal(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const d = String(dateObj.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
 function getDaysInMonth(year, month1Based) {
     // month1Based: 1-12
     return new Date(year, month1Based, 0).getDate();
@@ -586,7 +593,7 @@ export default function BookPage() {
 
 
         for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 7)) {
-            const iso = dt.toISOString().split("T")[0];
+            const iso = toISODateLocal(dt);
 
             // skip public holidays automatically
             if (holidaySet.has(iso)) continue;
@@ -1040,7 +1047,7 @@ export default function BookPage() {
         const d = new Date(weekStart);
         d.setDate(weekStart.getDate() + i);
         return {
-            iso: d.toISOString().split("T")[0],
+            iso: toISODateLocal(d),
             short: d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" }),
         };
     });

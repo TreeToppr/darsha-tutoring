@@ -13,6 +13,12 @@ import LessonModeToggle from "./LessonModeToggle";
  * - It does NOT call Supabase.
  * - It does NOT decide business rules beyond basic UI guardrails.
  */
+
+function dateFromYMDLocal(ymd) {
+    const [y, m, d] = ymd.split("-").map(Number);
+    return new Date(y, m - 1, d); // local timezone, no UTC shift
+}
+
 export default function BookingModal({
     open,
     selectedCell, // { date, start } or null
