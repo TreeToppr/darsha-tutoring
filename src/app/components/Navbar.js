@@ -102,18 +102,18 @@ export default function Navbar() {
 
         if (role === "parent") {
             return [
-                // ...base,
                 { href: "/parent/profile", label: "Profile" },
                 { href: "/parent/dashboard", label: "Dashboard" },
                 { href: "/parent/students", label: "Students" },
+                { href: "/parent/tutors", label: "Tutors" },
                 { href: "/book", label: "Book" },
             ];
         }
 
         if (role === "tutor") {
             return [
-                ...base,
                 { href: "/tutor/dashboard", label: "Dashboard" },
+                { href: "/tutor/parents", label: "Parents" },
                 { href: "/tutor/profile", label: "Profile" },
             ];
         }
