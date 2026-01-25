@@ -22,10 +22,12 @@ function buildPoliInitiateBody({ amount, merchantReference }) {
         MerchantReference: merchantReference,
 
         // keep the variants if you want (harmless):
-        HomepageURL: homepageUrl,
-        HomePageURL: homepageUrl,
-        HomepageUrl: homepageUrl,
-        HomePageUrl: homepageUrl,
+        // HomepageURL: homepageUrl,
+        // HomePageURL: homepageUrl,
+        // HomepageUrl: homepageUrl,
+        // HomePageUrl: homepageUrl,
+
+        MerchantHomepageURL: homepageUrl,
 
         SuccessURL: successUrl,
         SuccessUrl: successUrl,
@@ -85,6 +87,8 @@ export async function POST(req) {
         const authHeader = `Basic ${Buffer.from(
             `${requireEnv("POLI_MERCHANT_CODE")}:${requireEnv("POLI_AUTH_CODE")}`
         ).toString("base64")}`;
+
+        console.log("POLi initiate payload:", JSON.stringify(payload, null, 2));
 
         const res = await fetch(`${baseUrl}/Transaction/Initiate`, {
             method: "POST",
