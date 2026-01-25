@@ -95,74 +95,120 @@
 //     }
 // }
 
+// import { NextResponse } from "next/server";
+// import { supabaseAdmin } from "../../../../lib/supabaseAdmin"; // Ensure this path matches your file structure
+
+// export async function POST(request) {
+//     try {
+//         const { token } = await request.json();
+
+//         if (!token) {
+//             return NextResponse.json({ error: "Missing token" }, { status: 400 });
+//         }
+
+//         // 1. Ask POLi for transaction details using the token
+//         const auth = Buffer.from(
+//             `${process.env.POLI_MERCHANT_CODE}:${process.env.POLI_AUTH_CODE}`
+//         ).toString("base64");
+
+//         const poliResponse = await fetch(
+//             `${process.env.POLI_API_BASE_URL}/v2/Transaction/GetTransaction?token=${encodeURIComponent(token)}`,
+//             {
+//                 method: "GET",
+//                 headers: { Authorization: `Basic ${auth}` },
+//             }
+//         );
+
+//         const transaction = await poliResponse.json();
+
+//         if (!poliResponse.ok) {
+//             console.error("POLi GetTransaction failed:", transaction);
+//             return NextResponse.json({ error: "Failed to verify transaction" }, { status: 500 });
+//         }
+
+//         // 2. Check if the payment was actually successful
+//         const isSuccess = transaction.TransactionStatusCode === "Completed";
+
+//         // Extract UUID from "booking-UUID"
+//         const bookingId = transaction.MerchantReference.replace("booking-", "");
+
+//         // 3. Update Supabase
+//         const updatePayload = {
+//             poli_status: transaction.TransactionStatusCode,
+//             poli_transaction_ref: transaction.TransactionRefNo,
+//             payment_method: "POLi",
+//         };
+
+//         if (isSuccess) {
+//             // updatePayload.status = "confirmed"; // Adjust if your confirmed status is different
+//             updatePayload.payment_status = "paid";
+//             updatePayload.paid_at = new Date().toISOString();
+//         }
+
+//         const { error: dbError } = await supabaseAdmin
+//             .from("bookings")
+//             .update(updatePayload)
+//             .eq("id", bookingId);
+
+//         if (dbError) {
+//             console.error("Database update failed:", dbError);
+//             return NextResponse.json({ error: "Failed to update booking", details: dbError }, { status: 500 });
+//         }
+
+//         return NextResponse.json({
+//             success: isSuccess,
+//             status: transaction.TransactionStatusCode,
+//             bookingId
+//         });
+
+//     } catch (err) {
+//         console.error("Verify API error:", err);
+//         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+//     }
+// }
+
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../lib/supabaseAdmin"; // Ensure this path matches your file structure
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export async function POST(request) {
+export async function GET(request) {
+    const { searchParams } = new URL(request.url);
+    const token = searchParams.get("token");
+
+    if (!token) {
+        return NextResponse.redirect(new URL("/booking/error?msg=missing_token", request.url));
+    }
+
     try {
-        const { token } = await request.json();
-
-        if (!token) {
-            return NextResponse.json({ error: "Missing token" }, { status: 400 });
-        }
-
-        // 1. Ask POLi for transaction details using the token
-        const auth = Buffer.from(
-            `${process.env.POLI_MERCHANT_CODE}:${process.env.POLI_AUTH_CODE}`
-        ).toString("base64");
-
-        const poliResponse = await fetch(
-            `${process.env.POLI_API_BASE_URL}/v2/Transaction/GetTransaction?token=${encodeURIComponent(token)}`,
-            {
-                method: "GET",
-                headers: { Authorization: `Basic ${auth}` },
-            }
-        );
-
-        const transaction = await poliResponse.json();
-
-        if (!poliResponse.ok) {
-            console.error("POLi GetTransaction failed:", transaction);
-            return NextResponse.json({ error: "Failed to verify transaction" }, { status: 500 });
-        }
-
-        // 2. Check if the payment was actually successful
-        const isSuccess = transaction.TransactionStatusCode === "Completed";
-
-        // Extract UUID from "booking-UUID"
-        const bookingId = transaction.MerchantReference.replace("booking-", "");
-
-        // 3. Update Supabase
-        const updatePayload = {
-            poli_status: transaction.TransactionStatusCode,
-            poli_transaction_ref: transaction.TransactionRefNo,
-            payment_method: "POLi",
-        };
-
-        if (isSuccess) {
-            // updatePayload.status = "confirmed"; // Adjust if your confirmed status is different
-            updatePayload.payment_status = "paid";
-            updatePayload.paid_at = new Date().toISOString();
-        }
-
-        const { error: dbError } = await supabaseAdmin
-            .from("bookings")
-            .update(updatePayload)
-            .eq("id", bookingId);
-
-        if (dbError) {
-            console.error("Database update failed:", dbError);
-            return NextResponse.json({ error: "Failed to update booking", details: dbError }, { status: 500 });
-        }
-
-        return NextResponse.json({
-            success: isSuccess,
-            status: transaction.TransactionStatusCode,
-            bookingId
+        // 1. Call POLi to get the transaction status
+        const auth = Buffer.from(`${process.env.POLI_MERCHANT_CODE}:${process.env.POLI_AUTHENTICATION_CODE}`).toString("base64");
+        const response = await fetch(`https://ping.apac.paywithpoli.com/api/v2/Transaction/GetTransaction?token=${encodeURIComponent(token)}`, {
+            headers: { Authorization: `Basic ${auth}` },
         });
 
+        const data = await response.json();
+
+        // 2. Check if payment was successful
+        // Status 6 or 7 usually indicates completed/processed
+        if (data.TransactionStatusCode === "Completed" || data.TransactionStatusCode === "Processed") {
+
+            // 3. Update Supabase - ONLY payment_status and paid_at
+            // We avoid the 'status' column to prevent Check Constraint violations
+            const { error } = await supabaseAdmin
+                .from("bookings")
+                .update({
+                    payment_status: "paid",
+                    paid_at: new Date().toISOString()
+                })
+                .eq("id", data.MerchantReference); // Assuming MerchantReference is your booking ID
+
+            if (error) throw error;
+
+            return NextResponse.redirect(new URL("/booking/success", request.url));
+        } else {
+            return NextResponse.redirect(new URL(`/booking/error?status=${data.TransactionStatusCode}`, request.url));
+        }
     } catch (err) {
-        console.error("Verify API error:", err);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+        console.error("POLi Verification Error:", err);
+        return NextResponse.redirect(new URL("/booking/error?msg=verification_failed", request.url));
     }
 }

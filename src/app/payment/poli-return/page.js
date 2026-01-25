@@ -34,6 +34,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -97,6 +98,21 @@ function ReturnContent() {
                 <div style={{ color: "red" }}>
                     <h1>Payment Failed or Cancelled</h1>
                     <p>Please try again.</p>
+                    <br /> <br />
+                    <Link
+                        href="/parent/dashboard"
+                        style={{
+                            background: "#1f7aea",
+                            color: "#fff",
+                            padding: "10px 14px",
+                            borderRadius: 10,
+                            textDecoration: "none",
+                            fontWeight: 800,
+                            whiteSpace: "nowrap",
+                        }}
+                    >
+                        Go back to dashboard
+                    </Link>
                 </div>
             )}
 

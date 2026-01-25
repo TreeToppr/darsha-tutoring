@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const BRAND_BLUE = "#0b3d91";
 
