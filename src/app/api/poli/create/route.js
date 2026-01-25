@@ -88,9 +88,9 @@ export async function POST(req) {
             `${requireEnv("POLI_MERCHANT_CODE")}:${requireEnv("POLI_AUTH_CODE")}`
         ).toString("base64")}`;
 
-        console.log("POLi initiate payload:", JSON.stringify(payload, null, 2));
+        console.log("POLi initiate payload:", JSON.stringify(initiateBody, null, 2));
 
-        const res = await fetch(`${baseUrl}/Transaction/Initiate`, {
+        const res = await fetch(`${baseUrl}/v2/Transaction/Initiate`, {
             method: "POST",
             headers: {
                 Authorization: authHeader,
