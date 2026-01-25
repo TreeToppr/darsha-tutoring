@@ -58,17 +58,28 @@ export async function POST(req) {
         // POLi expects basic auth. (POLi dashboard/docs tells you exact format/base URL)
         const basic = Buffer.from(`${POLI_MERCHANT_CODE}:${POLI_AUTH_CODE}`).toString("base64");
 
+        const homepageUrl = requireEnv("POLI_HOMEPAGE_URL");
+        const notificationUrl = `${homepageUrl.replace(/\/$/, "")}/api/poli/nudge`;
+
         const payload = {
             Amount: amountNZD,
             CurrencyCode: "NZD",
-            MerchantReference: `booking:${booking.id}`,
+
+            // keep a single consistent format; your verify code expects "booking-<uuid>"
+            MerchantReference: `booking-${booking.id}`,
             MerchantData: JSON.stringify({ bookingId: booking.id }),
+
+            // POLi expects these exact field names
+            MerchantHomepageURL: homepageUrl,
+            NotificationURL: notificationUrl,
+
             SuccessURL: POLI_SUCCESS_URL,
             FailureURL: POLI_FAILURE_URL,
             CancellationURL: POLI_CANCEL_URL,
         };
 
-        const poliRes = await fetch(`${POLI_API_BASE_URL}/Transaction/Initiate`, {
+
+        const poliRes = await fetch(`${POLI_API_BASE_URL.replace(/\/$/, "")}/v2/Transaction/Initiate`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
