@@ -1,121 +1,217 @@
+// import { NextResponse } from "next/server";
+// import { createClient } from "@supabase/supabase-js";
+
+// export const runtime = "nodejs";
+// export const dynamic = "force-dynamic";
+
+// function requireEnv(name) {
+//     const v = process.env[name];
+//     if (!v) throw new Error(`Missing env var: ${name}`);
+//     return v;
+// }
+
+// function buildPoliInitiateBody({ amount, merchantReference }) {
+//     const homepageUrl = requireEnv("POLI_HOMEPAGE_URL");
+//     const successUrl = requireEnv("POLI_SUCCESS_URL");
+//     const failureUrl = requireEnv("POLI_FAILURE_URL");
+//     const cancelUrl = process.env.POLI_CANCEL_URL || failureUrl;
+
+//     return {
+//         Amount: Number(amount).toFixed(2),
+//         CurrencyCode: "NZD",
+//         MerchantReference: merchantReference,
+
+//         // keep the variants if you want (harmless):
+//         HomepageURL: homepageUrl,
+//         HomePageURL: homepageUrl,
+//         HomepageUrl: homepageUrl,
+//         HomePageUrl: homepageUrl,
+
+//         SuccessURL: successUrl,
+//         SuccessUrl: successUrl,
+
+//         FailureURL: failureUrl,
+//         FailureUrl: failureUrl,
+
+//         CancellationURL: cancelUrl,
+//         CancellationUrl: cancelUrl,
+//     };
+// }
+
+// export async function POST(req) {
+//     try {
+//         const { bookingId } = await req.json();
+
+//         if (!bookingId) {
+//             return NextResponse.json({ ok: false, error: "Missing bookingId" }, { status: 400 });
+//         }
+
+//         // Server-side lookup of booking -> amount
+//         const supabase = createClient(
+//             requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+//             requireEnv("SUPABASE_SERVICE_ROLE_KEY") // must exist in .env.local (server only)
+//         );
+
+//         const { data: booking, error: bookingErr } = await supabase
+//             .from("bookings")
+//             .select("amount_total") // <-- change this column name to whatever you actually store
+//             .eq("id", bookingId)
+//             .single();
+
+//         if (bookingErr || !booking) {
+//             return NextResponse.json(
+//                 { ok: false, error: "Booking not found", details: bookingErr?.message },
+//                 { status: 404 }
+//             );
+//         }
+
+//         const amount = booking.amount_total;
+
+//         const amountNumber = Number(amount);
+
+//         if (!Number.isFinite(amountNumber) || amountNumber < 0.01) {
+//             return NextResponse.json(
+//                 { ok: false, error: "Invalid booking amount", amount },
+//                 { status: 400 }
+//             );
+//         }
+//         console.log("booking row:", booking);
+
+//         const merchantReference = `booking-${bookingId}`;
+
+//         const baseUrl = requireEnv("POLI_API_BASE_URL").replace(/\/$/, "");
+//         const initiateBody = buildPoliInitiateBody({ amount, merchantReference });
+
+//         const authHeader = `Basic ${Buffer.from(
+//             `${requireEnv("POLI_MERCHANT_CODE")}:${requireEnv("POLI_AUTH_CODE")}`
+//         ).toString("base64")}`;
+
+//         const res = await fetch(`${baseUrl}/Transaction/Initiate`, {
+//             method: "POST",
+//             headers: {
+//                 Authorization: authHeader,
+//                 "Content-Type": "application/json",
+//                 Accept: "application/json",
+//             },
+//             body: JSON.stringify(initiateBody),
+//         });
+
+//         const text = await res.text();
+//         let json = null;
+//         try { json = JSON.parse(text); } catch { }
+
+//         if (!res.ok) {
+//             return NextResponse.json(
+//                 {
+//                     ok: false,
+//                     error: json?.ErrorMessage || json?.error || text || "POLi initiate failed",
+//                     status: res.status,
+//                     details: json,
+//                     sent: initiateBody,
+//                 },
+//                 { status: res.status }
+//             );
+//         }
+
+//         if (!json?.NavigateURL) {
+//             return NextResponse.json(
+//                 { ok: false, error: "POLi response missing NavigateURL", details: json, sent: initiateBody },
+//                 { status: 502 }
+//             );
+//         }
+
+//         return NextResponse.json({ ok: true, navigateUrl: json.NavigateURL });
+//     } catch (e) {
+//         return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
+//     }
+// }
+
+
 import { NextResponse } from "next/server";
-import { supabase } from "../../../../lib/supabaseClient"; // adjust if your path differs
+import { supabaseAdmin } from "../../../../lib/supabaseAdmin"; // Use admin client to ensure we can read the booking
 
-function getBasicAuthHeader() {
-    const merchant = process.env.POLI_MERCHANT_CODE;
-    const auth = process.env.POLI_AUTH_CODE;
-    if (!merchant || !auth) throw new Error("Missing POLI credentials in env.");
-    const token = Buffer.from(`${merchant}:${auth}`).toString("base64");
-    return `Basic ${token}`;
-}
-
-/**
- * We keep POLi-specific field names isolated here.
- * If your POLi dashboard/docs use slightly different names, you edit this one function.
- */
-function buildPoliInitiateBody({ amount, merchantReference }) {
-    return {
-        Amount: Number(amount).toFixed(2),
-        CurrencyCode: process.env.POLI_CURRENCY_CODE || "NZD",
-        MerchantReference: merchantReference,
-        SuccessURL: process.env.POLI_SUCCESS_URL,
-        FailureURL: process.env.POLI_FAILURE_URL,
-    };
-}
-
-export async function POST(req) {
+export async function POST(request) {
     try {
-        const { bookingId } = await req.json();
+        const body = await request.json();
+        const { bookingId } = body;
 
         if (!bookingId) {
             return NextResponse.json({ error: "Missing bookingId" }, { status: 400 });
         }
 
-        // 1) Identify user (security)
-        const {
-            data: { user },
-            error: authErr,
-        } = await supabase.auth.getUser();
-
-        if (authErr || !user) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-        }
-
-        // 2) Load booking and verify ownership
-        const { data: booking, error: bookingErr } = await supabase
+        // 1. Fetch booking details
+        const { data: booking, error: dbError } = await supabaseAdmin
             .from("bookings")
-            .select("id, parent_id, amount_total, payment_status")
+            .select("id, amount_total, status")
             .eq("id", bookingId)
             .single();
 
-        if (bookingErr || !booking) {
+        if (dbError || !booking) {
+            console.error("Database error fetching booking:", dbError);
             return NextResponse.json({ error: "Booking not found" }, { status: 404 });
         }
 
-        if (booking.parent_id !== user.id) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        // 2. Validate and Format Amount
+        // SAFETY CHECK: Ensure amount exists. If your DB stores CENTS, change this line to:
+        // const amountValue = booking.amount_total / 100;
+        const amountValue = booking.amount_total;
+
+        if (amountValue === null || amountValue === undefined || isNaN(amountValue)) {
+            console.error(`Invalid amount for booking ${bookingId}:`, booking.amount_total);
+            return NextResponse.json({ error: "Booking amount is invalid or zero" }, { status: 400 });
         }
 
-        if (String(booking.payment_status).toLowerCase() === "paid") {
-            return NextResponse.json({ error: "Already paid" }, { status: 400 });
-        }
+        // POLi requires a string formatted to 2 decimal places (e.g., "40.00")
+        const formattedAmount = Number(amountValue).toFixed(2);
 
-        const amount = Number(booking.amount_total);
-        if (!Number.isFinite(amount) || amount <= 0) {
-            return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
-        }
+        // 3. Build POLi Payload
+        // CRITICAL FIX: The field name is "MerchantHomepageURL", NOT "HomepageURL"
+        const poliPayload = {
+            Amount: formattedAmount,
+            CurrencyCode: "NZD",
+            MerchantReference: `booking-${booking.id}`.substring(0, 80), // Ensure we don't exceed max length
+            MerchantHomepageURL: process.env.POLI_HOMEPAGE_URL || "http://localhost:3000",
+            SuccessURL: process.env.POLI_SUCCESS_URL,
+            FailureURL: process.env.POLI_FAILURE_URL,
+            CancellationURL: process.env.POLI_CANCEL_URL,
+            // NotificationURL is highly recommended for server-to-server confirmation (The "Nudge")
+            NotificationURL: `${process.env.POLI_HOMEPAGE_URL}/api/poli/nudge`
+        };
 
-        // 3) Initiate with POLi
-        const base = process.env.POLI_API_BASE || "https://poliapi.apac.paywithpoli.com/api"; // :contentReference[oaicite:1]{index=1}
-        const url = `${base}/Transaction/Initiate`; // if this path differs in your account/docs, change here
+        console.log("Sending to POLi:", JSON.stringify(poliPayload, null, 2));
 
-        const merchantReference = `booking-${booking.id}`;
+        // 4. Call POLi API
+        const auth = Buffer.from(
+            `${process.env.POLI_MERCHANT_CODE}:${process.env.POLI_AUTH_CODE}`
+        ).toString("base64");
 
-        const poliRes = await fetch(url, {
+        const response = await fetch(`${process.env.POLI_API_BASE_URL}/v2/Transaction/Initiate`, {
             method: "POST",
             headers: {
-                Authorization: getBasicAuthHeader(), // :contentReference[oaicite:2]{index=2}
                 "Content-Type": "application/json",
-                Accept: "application/json",
+                Authorization: `Basic ${auth}`,
             },
-            body: JSON.stringify(buildPoliInitiateBody({ amount, merchantReference })),
+            body: JSON.stringify(poliPayload),
         });
 
-        const poliJson = await poliRes.json().catch(() => ({}));
-        if (!poliRes.ok) {
+        const result = await response.json();
+
+        if (!response.ok || result.Success === false) {
+            console.error("POLi API Error:", result);
             return NextResponse.json(
-                { error: poliJson?.Message || poliJson?.error || "POLi initiate failed", details: poliJson },
-                { status: 502 }
+                { error: result.ErrorMessage || "POLi transaction failed", code: result.ErrorCode },
+                { status: 400 }
             );
         }
 
-        // Common patterns: RedirectURL + TransactionToken OR NavigateURL, etc.
-        const redirectUrl =
-            poliJson?.NavigateURL || poliJson?.RedirectURL || poliJson?.TransactionURL;
+        // 5. Success - Return the NavigateURL
+        return NextResponse.json({
+            navigateUrl: result.NavigateURL,
+            transactionRef: result.TransactionRefNo
+        });
 
-        const token =
-            poliJson?.TransactionToken || poliJson?.Token || poliJson?.TransactionRefNo;
-
-        if (!redirectUrl) {
-            return NextResponse.json(
-                { error: "POLi response missing redirect URL", details: poliJson },
-                { status: 502 }
-            );
-        }
-
-        // 4) Save token/reference on booking
-        await supabase
-            .from("bookings")
-            .update({
-                payment_method: "poli",
-                payment_status: "pending",
-                poli_token: token || null,
-                poli_transaction_ref: merchantReference,
-            })
-            .eq("id", booking.id);
-
-        return NextResponse.json({ redirectUrl });
-    } catch (e) {
-        return NextResponse.json({ error: e.message || "Server error" }, { status: 500 });
+    } catch (err) {
+        console.error("Server error initiating POLi:", err);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

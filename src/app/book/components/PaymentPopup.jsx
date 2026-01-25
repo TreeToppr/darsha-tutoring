@@ -93,11 +93,37 @@ export default function PaymentPopup({
                         <button
                             type="button"
                             onClick={() => onStartPoliPay(payment.bookingId)}
-                            style={{ marginTop: 12 }}
+                            style={{
+                                marginTop: 12,
+                                border: "none",
+                                background: "#1f7aea",
+                                color: "#fff",
+                                borderRadius: 10,
+                                padding: "10px 12px",
+                                cursor: "pointer",
+                                fontWeight: 900,
+                                whiteSpace: "nowrap",
+                            }}
+                            title="Pay securely with POLi"
                         >
-                            {/* Pay with POLi */}
+                            Pay with POLi
                         </button>
                     ) : null}
+
+                    {/* <button
+                        onClick={onStartPoliPay}
+                        style={{
+                            padding: "10px 14px",
+                            borderRadius: 10,
+                            border: "1px solid #0b5fff",
+                            background: "#0b5fff",
+                            color: "white",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                        }}
+                    >
+                        Pay with POLi
+                    </button> */}
 
                     <button
                         type="button"

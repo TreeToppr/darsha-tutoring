@@ -169,6 +169,31 @@ export default function BookPage() {
         return "other";
     };
 
+    const onStartPoliPay = async () => {
+        if (!paymentPopup?.bookingId) return;
+
+        try {
+            const res = await fetch("/api/poli/initiate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bookingId: paymentPopup.bookingId }),
+            });
+
+            const json = await res.json();
+
+            if (!res.ok) {
+                console.error("POLi initiate error:", json);
+                alert(json?.error || "POLi payment failed to start.");
+                return;
+            }
+
+            window.location.href = json.navigateUrl;
+        } catch (err) {
+            console.error(err);
+            alert("Could not start POLi payment.");
+        }
+    };
+
     const timeStrToMinutes = (t) => timeToMinutes(String(t || "").slice(0, 5));
 
     const getSelectedStudent = () => students.find((s) => s.id === selectedStudentId) || null;
@@ -1026,7 +1051,85 @@ export default function BookPage() {
                     // router.refresh();
 
                 }}
-                onStartPoliPay={async (bookingId) => { /* unchanged */ }}
+                // onStartPoliPay={async (bookingId) => {
+                //     try {
+                //         setMessage("Redirecting to POLi...");
+
+                //         const { data: { session } } = await supabase.auth.getSession();
+                //         const accessToken = session?.access_token;
+
+                //         if (!accessToken) {
+                //             alert("You are not logged in. Please sign in again.");
+                //             return;
+                //         }
+
+                //         const res = await fetch("/api/poli/create", {
+                //             method: "POST",
+                //             headers: {
+                //                 "Content-Type": "application/json",
+                //                 Authorization: `Bearer ${accessToken}`,
+                //             },
+                //             body: JSON.stringify({ bookingId }), // ✅ USE THE PARAM, not booking.id
+                //         });
+
+                //         const json = await res.json().catch(() => ({}));
+
+                //         if (!res.ok) {
+                //             throw new Error(json?.error || "POLi payment could not be started.");
+                //         }
+
+                //         if (!json?.redirectUrl) {
+                //             throw new Error("POLi did not return a redirect URL.");
+                //         }
+
+                //         window.location.assign(json.redirectUrl);
+                //     } catch (e) {
+                //         setMessage(e?.message || "POLi payment could not be started.");
+                //     }
+                // }}
+
+                onStartPoliPay={async (bookingId) => {
+                    try {
+                        setMessage("Redirecting to POLi...");
+
+                        // 1. Get the user's auth token
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const accessToken = session?.access_token;
+
+                        if (!accessToken) {
+                            alert("You are not logged in. Please sign in again.");
+                            return;
+                        }
+
+                        // 2. Call your API
+                        const res = await fetch("/api/poli/create", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${accessToken}`,
+                            },
+                            body: JSON.stringify({ bookingId }),
+                        });
+
+                        const json = await res.json(); // Don't use .catch() here so we see the real error
+
+                        if (!res.ok) {
+                            throw new Error(json?.error || "POLi payment could not be started.");
+                        }
+
+                        // --- FIX IS HERE: Use 'navigateUrl' to match your backend ---
+                        if (json.navigateUrl) {
+                            window.location.href = json.navigateUrl;
+                        } else {
+                            console.error("POLi response missing URL:", json);
+                            throw new Error("POLi did not return a payment URL.");
+                        }
+
+                    } catch (e) {
+                        console.error(e);
+                        setMessage(e?.message || "POLi payment could not be started.");
+                    }
+                }}
                 onCopied={() => setMessage("Payment details copied.")}
                 onCopyFailed={() => setMessage("Could not copy. Please copy manually.")}
             />

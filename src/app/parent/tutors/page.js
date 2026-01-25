@@ -217,7 +217,7 @@ export default function ParentTutorsPage() {
                                             {tutorStats[t.id].owedTotal > 0 ? (
                                                 <>
                                                     {" "}·{" "}
-                                                    <span style={{ fontWeight: 900 }}>${tutorStats[t.id].owedTotal.toFixed(2)}</span>{" "}
+                                                    <span style={{ fontWeight: 900, color: "#ee2222" }}>${tutorStats[t.id].owedTotal.toFixed(2)}</span>{" "}
                                                     owed
                                                 </>
                                             ) : null}
