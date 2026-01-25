@@ -246,8 +246,11 @@ export default function ParentDashboard() {
     const [tutors, setTutors] = useState([]);
     // "bookings" | "calendar" | "profile"
     // const [activeTab, setActiveTab] = useState("bookings");
-    const [creditBalanceNzd, setCreditBalanceNzd] = useState(0);
-    const [creditLedgerRows, setCreditLedgerRows] = useState([]);
+
+    // Credits temporarily disabled
+    // const [creditBalanceNzd, setCreditBalanceNzd] = useState(0);
+    // const [creditLedgerRows, setCreditLedgerRows] = useState([]);
+
     // const [view, setView] = useState("both"); // "both" | "profile" | "calendar"
     const [view, setView] = useState("calendar"); // "calendar" | "list"
     const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 4 = 4 weeks ahead (about a month)
@@ -530,14 +533,17 @@ export default function ParentDashboard() {
                 },
             });
 
-            setMessage(
-                totalCredit > 0
-                    ? `Cancelled. Credit issued: $${totalCredit.toFixed(2)} NZD`
-                    : "Cancelled. No refund (within 12 hours)."
-            );
+            // setMessage(
+            //     totalCredit > 0
+            //         ? `Cancelled. Credit issued: $${totalCredit.toFixed(2)} NZD`
+            //         : "Cancelled. No refund (within 12 hours)."
+            // );
+
+            setMessage("Booking cancelled.");
 
             const { data: { user } } = await supabase.auth.getUser();
-            if (user) await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors(), loadCredits(user.id)]);
+            // if (user) await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors(), loadCredits(user.id)]);
+            if (user) await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors()]);
             const { data: authUserRes } = await supabase.auth.getUser();
             const parentEmail = authUserRes?.user?.email || "";
 
@@ -685,7 +691,8 @@ export default function ParentDashboard() {
 
             setProfile(profileData);
 
-            await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors(), loadCredits(user.id)]);
+            // await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors(), loadCredits(user.id)]);
+            await Promise.all([loadBookings(user.id), loadStudents(user.id), loadTutors()]);
             await loadGoogleCalendars();
             setUserId(user.id);
             setChecking(false);
@@ -1221,7 +1228,7 @@ export default function ParentDashboard() {
                                 setCancelModal({
                                     booking,
                                     scope: "single",
-                                        reason: "",
+                                    reason: "",
                                     confirmText: "",
                                 })
                             }

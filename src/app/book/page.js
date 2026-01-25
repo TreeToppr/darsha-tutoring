@@ -128,40 +128,29 @@ export default function BookPage() {
 
     const [checking, setChecking] = useState(true);
     const [message, setMessage] = useState("");
-    // Payment info popup after booking request
     const [paymentPopup, setPaymentPopup] = useState(null);
-    // shape: { studentName, sessionDate, paymentStatus, paymentMethod, lessonMode, amountTotal, amountBase, amountTravel }
     const [students, setStudents] = useState([]);
     const [selectedStudentId, setSelectedStudentId] = useState("");
     const [requestingKey, setRequestingKey] = useState("");
-    // const [date, setDate] = useState("");
-    // const [slots, setSlots] = useState([]);
     const [terms, setTerms] = useState([]);
     const [isRecurring, setIsRecurring] = useState(false);
     const [selectedTermId, setSelectedTermId] = useState("");
     const [monthOffset, setMonthOffset] = useState(0); // week offset (0 = this week)
     const [minWeekOffset, setMinWeekOffset] = useState(0); // first week that has any availability
-    // const [selectedCell, setSelectedCell] = useState(null);
-    // const [modalDuration, setModalDuration] = useState(60);
-    // const [modalNotes, setModalNotes] = useState("");
     const [lessonMode, setLessonMode] = useState("online"); // "online" | "in_person"
     const [profileAddress, setProfileAddress] = useState("");
     const [bookingAddress, setBookingAddress] = useState("");
     const [hoverPreview, setHoverPreview] = useState(null); // { date, start, end }
     const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
     const [slotsByDate, setSlotsByDate] = useState({});
-    // const [myBookings, setMyBookings] = useState([]);
     const [loadingWeek, setLoadingWeek] = useState(false);
-    // const [timesAreHalfHour] = useState(true);
     const isLoading = loadingWeek;
     const [hoveredRange, setHoveredRange] = useState(null); // { date, start, end }
-    // const [price, setPrice] = useState(null);
     const [driveMinutes, setDriveMinutes] = useState(null);
     const [priceQuote, setPriceQuote] = useState(null); // { base, travel, total }
     const [pricingError, setPricingError] = useState("");
     const [pricingLoading, setPricingLoading] = useState(false);
     const [parentId, setParentId] = useState(null);
-    // const [myBookingsByDate, setMyBookingsByDate] = useState({}); // { "YYYY-MM-DD": [{...}, ...] }
     const [bookingsByDate, setBookingsByDate] = useState({});
     const [otherBookingsByDate, setOtherBookingsByDate] = useState({});
     const [tutors, setTutors] = useState([]);
@@ -171,7 +160,6 @@ export default function BookPage() {
     const [selectedSubjectId, setSelectedSubjectId] = useState("");
     const [creditBalance, setCreditBalance] = useState(0);
     const [pendingSlot, setPendingSlot] = useState(null);
-    // shape: { date: "YYYY-MM-DD", start: number, end: number }
 
     const statusToBucket = (status) => {
         const s = String(status || "").toLowerCase();
@@ -189,9 +177,9 @@ export default function BookPage() {
     const calcBasePrice = (yearLevel) => (Number(yearLevel) >= 7 ? 40 : 30);
 
     /**
- * Given a subjectId, return tutors who teach it.
- * tutorSubjects = { tutorId: [subjectId,...] }
- */
+    * Given a subjectId, return tutors who teach it.
+    * tutorSubjects = { tutorId: [subjectId,...] }
+    */
     const getTutorsForSubject = (subjectId) => {
         if (!subjectId) return [];
         return tutors.filter((t) => (tutorSubjects[t.id] || []).includes(subjectId));
@@ -754,29 +742,6 @@ export default function BookPage() {
         const travel = lessonMode === "in_person" ? (priceQuote?.travel ?? 0) : 0;
         const total = lessonMode === "in_person" ? (priceQuote?.total ?? base) : base;
 
-        // const { error } = await supabase.from("bookings").insert({
-        //     tutor_id: tutor.id,
-        //     parent_id: user.id,
-        //     student_id: selectedStudentId,
-        //     session_date: sessionDate,
-        //     start_time: minutesToTime(slot.start),
-        //     end_time: minutesToTime(slot.end),
-
-        //     lesson_mode: lessonMode === "in_person" ? "in_person" : "online",
-        //     booking_address_text: lessonMode === "in_person" ? (bookingAddress || "").trim() : null,
-
-        //     status: "requested",
-        //     is_recurring: false,
-        //     notes: modalNotes || null,
-
-        //     payment_status: "unpaid",
-        //     payment_method: "bank_transfer",
-
-        //     amount_base: base,
-        //     amount_travel: travel,
-        //     amount_total: total,
-        // });
-
         const { data: newBooking, error } = await supabase
             .from("bookings")
             .insert({
@@ -983,13 +948,6 @@ export default function BookPage() {
         return arr;
     })(); // minutes since midnight at 30-min increments
 
-    // useEffect(() => {
-    //     if (checking) return;
-    //     loadWeekSlots(weekDays);
-    //     loadMyBookingsForWeek(weekDays, parentId);
-    //     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // }, [monthOffset, checking, parentId]);
-
     useEffect(() => {
         if (!selectedTutorId) return;
         loadWeekSlots(weekDays, selectedTutorId);
@@ -1020,19 +978,6 @@ export default function BookPage() {
 
     return (
         <main style={{ maxWidth: 720, margin: "0 auto", padding: 32 }}>
-            {/* <h1>Book a lesson</h1>
-
-            <p style={{ color: "#555", lineHeight: "1.6" }}>
-                Tap a white block to request a booking.
-                <br />
-                <span style={{ color: "#999", fontWeight: 600 }}>■ Grey</span> blocks are unavailable.
-                <br />
-                <span style={{ color: "#6F42C1", fontWeight: 600 }}>■ Purple</span> blocks are <u><strong>other</strong></u> student bookings.
-                <br />
-                <span style={{ color: "#e0d42d", fontWeight: 600 }}>■ Yellow</span> blocks are <u><strong>your</strong></u> requested bookings.
-                <br />
-                <span style={{ color: "#2e7d32", fontWeight: 600 }}>■ Green</span> blocks are <u><strong>your</strong></u> bookings.
-            </p> */}
 
             {/* Payment popup (after booking request) */}
             <PaymentPopup
@@ -1086,103 +1031,6 @@ export default function BookPage() {
                 onCopyFailed={() => setMessage("Could not copy. Please copy manually.")}
             />
 
-            {/* Modal: minimal booking editor */}
-            {/* <BookingModal
-                open={!!selectedCell}
-                selectedCell={selectedCell}
-                formatISO={formatISO}
-                minutesToTime={minutesToTime}
-                onClose={() => setSelectedCell(null)}
-
-                // Student selection
-                students={students}
-                selectedStudentId={selectedStudentId}
-                onSelectStudent={(studentId) => {
-                    setSelectedStudentId(studentId);
-
-                    // Business rule: switching student may change base price
-                    setDriveMinutes(null);
-                    setPriceQuote(null);
-                    setPricingError("");
-                }}
-
-                // Duration + notes
-                modalDuration={modalDuration}
-                setModalDuration={setModalDuration}
-                modalNotes={modalNotes}
-                setModalNotes={setModalNotes}
-
-                // Lesson mode + pricing
-                lessonMode={lessonMode}
-                setLessonMode={(mode) => {
-                    setLessonMode(mode);
-
-                    // Business rule: switching mode invalidates pricing quote
-                    setDriveMinutes(null);
-                    setPriceQuote(null);
-                    setPricingError("");
-                }}
-                bookingAddress={bookingAddress}
-                setBookingAddress={(value) => {
-                    setBookingAddress(value);
-
-                    // Business rule: address change invalidates travel calculation
-                    setDriveMinutes(null);
-                    setPriceQuote(null);
-                    setPricingError("");
-                }}
-                pricingLoading={pricingLoading}
-                pricingError={pricingError}
-                priceQuote={priceQuote}
-                driveMinutes={driveMinutes}
-                onCalculatePrice={() => {
-                    const addr = (bookingAddress || "").trim();
-
-                    if (!selectedStudentId) {
-                        setPricingError("Please select a student first.");
-                        return;
-                    }
-                    if (!addr) {
-                        setPricingError("Please enter an address first.");
-                        return;
-                    }
-
-                    calculateTravelCost(addr);
-                }}
-
-                // Recurring + term
-                isRecurring={isRecurring}
-                setIsRecurring={setIsRecurring}
-                terms={terms}
-                selectedTermId={selectedTermId}
-                setSelectedTermId={setSelectedTermId}
-
-                // Confirm action (keeps your exact logic)
-                onConfirm={async () => {
-                    if (!selectedStudentId) {
-                        setMessage("Please select a student before confirming.");
-                        return;
-                    }
-
-                    if (lessonMode === "in_person" && !priceQuote) {
-                        setMessage("Please calculate the price before confirming an in-person booking.");
-                        return;
-                    }
-
-                    const slot = {
-                        start: selectedCell.start,
-                        end: selectedCell.start + modalDuration,
-                    };
-
-                    if (isRecurring) {
-                        await handleRequestRecurring(selectedCell.date, slot);
-                    } else {
-                        await handleRequestBooking(selectedCell.date, slot);
-                    }
-
-                    setSelectedCell(null);
-                }}
-            /> */}
 
             {/* Booking Wizard */}
             <div style={{ maxWidth: 980, margin: "0 auto", padding: "18px 14px" }}>
@@ -1342,14 +1190,6 @@ export default function BookPage() {
                                     </button>
                                 </div>
 
-                                {/* <LessonModeToggle
-                                    lessonMode={lessonMode}
-                                    onChangeMode={setLessonMode}
-                                    priceQuote={priceQuote}
-                                    driveMinutes={driveMinutes}
-                                    onCalculatePrice={calculateTravelCost}
-                                /> */}
-
                                 <LessonModeToggle
                                     lessonMode={lessonMode}
                                     onChangeMode={setLessonMode}
@@ -1366,44 +1206,6 @@ export default function BookPage() {
                                     priceQuote={priceQuote}
                                     driveMinutes={driveMinutes}
                                     onCalculatePrice={calculateTravelCost}
-                                />
-
-
-                                {/* Week navigation stays, but only inside step 4 */}
-                                <div style={{ margin: "12px 0", display: "flex", alignItems: "center", gap: 12 }}>
-                                    <button
-                                        onClick={() => setMonthOffset((prev) => Math.max(minWeekOffset, prev - 1))}
-                                        disabled={monthOffset <= minWeekOffset}
-                                    >
-                                        ◀
-                                    </button>
-
-                                    <div style={{ fontWeight: 850 }}>
-                                        Week of {formatISO(weekDays[0].iso)} to {formatISO(weekDays[6].iso)}
-                                    </div>
-
-                                    <button
-                                        onClick={() => setMonthOffset((prev) => Math.min(minWeekOffset + 3, prev + 1))}
-                                        disabled={monthOffset >= minWeekOffset + 3}
-                                    >
-                                        ▶
-                                    </button>
-                                </div>
-
-                                <BookingCalendar
-                                    weekDays={weekDays}
-                                    hours={hours}
-                                    slotsByDate={slotsByDate}
-                                    bookingsByDate={bookingsByDate}
-                                    otherBookingsByDate={otherBookingsByDate}
-                                    loadingWeek={loadingWeek}
-                                    selectedStudentId={selectedStudentId}
-                                    formatISO={formatISO}
-                                    minutesToTime={minutesToTime}
-                                    timeToMinutes={timeToMinutes}
-                                    statusToBucket={statusToBucket}
-                                    onCellClick={handleCellClick}
-                                    onHoverRange={setHoveredRange}
                                 />
 
                                 {pendingSlot ? (
@@ -1480,6 +1282,44 @@ export default function BookPage() {
                                         </div>
                                     </div>
                                 ) : null}
+
+                                {/* Week navigation stays, but only inside step 4 */}
+                                <div style={{ margin: "12px 0", display: "flex", alignItems: "center", gap: 12 }}>
+                                    <button
+                                        onClick={() => setMonthOffset((prev) => Math.max(minWeekOffset, prev - 1))}
+                                        disabled={monthOffset <= minWeekOffset}
+                                    >
+                                        ◀
+                                    </button>
+
+                                    <div style={{ fontWeight: 850 }}>
+                                        Week of {formatISO(weekDays[0].iso)} to {formatISO(weekDays[6].iso)}
+                                    </div>
+
+                                    <button
+                                        onClick={() => setMonthOffset((prev) => Math.min(minWeekOffset + 3, prev + 1))}
+                                        disabled={monthOffset >= minWeekOffset + 3}
+                                    >
+                                        ▶
+                                    </button>
+                                </div>
+
+                                <BookingCalendar
+                                    weekDays={weekDays}
+                                    hours={hours}
+                                    slotsByDate={slotsByDate}
+                                    bookingsByDate={bookingsByDate}
+                                    otherBookingsByDate={otherBookingsByDate}
+                                    loadingWeek={loadingWeek}
+                                    selectedStudentId={selectedStudentId}
+                                    formatISO={formatISO}
+                                    minutesToTime={minutesToTime}
+                                    timeToMinutes={timeToMinutes}
+                                    statusToBucket={statusToBucket}
+                                    onCellClick={handleCellClick}
+                                    onHoverRange={setHoveredRange}
+                                />
+
                             </>
                         ) : null}
                     </div>
@@ -1487,8 +1327,6 @@ export default function BookPage() {
 
                 {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
             </div>
-
-            {/* {message && <p style={{ marginTop: 12 }}>{message}</p>} */}
         </main>
     );
 }

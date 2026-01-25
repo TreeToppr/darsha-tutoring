@@ -145,9 +145,9 @@ export default function PaymentPopup({
                         Bank transfer
                     </span>
 
-                    <div style={{ marginTop: 10, fontSize: 13, color: "#555" }}>
+                    {/* <div style={{ marginTop: 10, fontSize: 13, color: "#555" }}>
                         Credit balance: <strong>${Number(creditBalance || 0).toFixed(2)}</strong> NZD
-                    </div>
+                    </div> */}
 
                     <span
                         style={{
@@ -197,7 +197,7 @@ export default function PaymentPopup({
                 </div>
 
                 <div style={{ marginTop: 14, display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                    {typeof onPayWithCredit === "function" &&
+                    {/* {typeof onPayWithCredit === "function" &&
                         payment.bookingId &&
                         typeof payment.amountTotal === "number" &&
                         creditBalance >= payment.amountTotal ? (
@@ -217,7 +217,7 @@ export default function PaymentPopup({
                         >
                             Pay with credit (${payment.amountTotal})
                         </button>
-                    ) : null}
+                    ) : null} */}
 
                     <button
                         type="button"

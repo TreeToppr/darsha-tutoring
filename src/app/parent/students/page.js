@@ -504,7 +504,7 @@ export default function ParentStudentsPage() {
 
                                         {/* Right side actions */}
                                         <div className="student-card-actions" style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-                                            <button
+                                            {/* <button
                                                 type="button"
                                                 onClick={() => handleToggleCanBook(s.id, !s.can_student_book)}
                                                 disabled={editingId === s.id || deletingId === s.id}
@@ -521,7 +521,7 @@ export default function ParentStudentsPage() {
                                                 title="Allow this student to book lessons themselves"
                                             >
                                                 {s.can_student_book ? "Can book: ON" : "Can book: OFF"}
-                                            </button>
+                                            </button> */}
 
                                             <div className="student-action-row" style={{ display: "flex", gap: 8 }}>
                                                 <button
