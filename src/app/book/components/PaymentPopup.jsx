@@ -14,6 +14,7 @@ export default function PaymentPopup({
     formatISO,
     buildPaymentCopyText,
     onClose,
+    onDone,
     onStartPoliPay,
     onPayWithCredit,
     creditBalance,
@@ -38,6 +39,13 @@ export default function PaymentPopup({
         } catch {
             if (onCopyFailed) onCopyFailed();
         }
+    };
+
+    // "Done" can optionally do something extra (e.g., navigate to dashboard)
+    // while keeping close behaviour available for overlay/X clicks.
+    const handleDone = () => {
+        if (typeof onDone === "function") return onDone();
+        if (typeof onClose === "function") return onClose();
     };
 
     return (
@@ -228,7 +236,7 @@ export default function PaymentPopup({
 
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={handleDone}
                         style={{
                             border: "none",
                             background: "#1f7aea",
