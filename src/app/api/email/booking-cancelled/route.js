@@ -7,7 +7,7 @@ import { sendEmail } from "../../../../lib/email/resend";
 export async function POST(req) {
     try {
         const body = await req.json();
-        const { parentEmail, studentFirstName, sessionDate, startTime, endTime } = body || {};
+        const { parentEmail, studentFirstName, sessionDate, startTime, endTime, cancelReason } = body || {};
 
         if (!parentEmail) {
             return NextResponse.json({ error: "Missing parentEmail" }, { status: 400 });
@@ -23,6 +23,7 @@ export async function POST(req) {
                     <strong>${studentFirstName || "Student"}</strong><br/>
                     ${sessionDate} • ${timeRange}
                 </p>
+                ${cancelReason ? `<p style="margin: 0 0 8px 0;"><strong>Reason:</strong> ${String(cancelReason)}</p>` : ""}
                 <p style="margin: 16px 0 0 0; color: #555;">
                     If this was a mistake, you can re-book in DarshaTutor.
                 </p>
@@ -33,7 +34,7 @@ export async function POST(req) {
             to: parentEmail,
             subject,
             html,
-            text: `Lesson cancelled: ${studentFirstName || "Student"} on ${sessionDate} ${timeRange}`,
+            text: `Lesson cancelled: ${studentFirstName || "Student"} on ${sessionDate} ${timeRange}${cancelReason ? `\nReason: ${String(cancelReason)}` : ""}`,
         });
 
         return NextResponse.json({ ok: true });

@@ -39,6 +39,21 @@ function formatISO(iso) {
     return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); // e.g. "Mon 5 Jan"
 }
 
+function ordinal(n) {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function formatPrettyDate(isoDate) {
+    // isoDate = "YYYY-MM-DD"
+    const d = new Date(isoDate + "T00:00:00");
+    const day = d.getDate();
+    const month = d.toLocaleDateString("en-NZ", { month: "short" });
+    const year = d.getFullYear();
+    return `${ordinal(day)} ${month} ${year}`; // e.g. "26th Jan 2026"
+}
+
 function buildPaymentCopyText({ studentName, sessionDate, amountTotal, lessonMode }) {
     const ref = `${studentName || "Student"} ${sessionDate || ""}`.trim();
     const modeLabel = lessonMode === "in_person" ? "In person" : "Online";
@@ -1096,7 +1111,7 @@ export default function BookPage() {
     };
 
     return (
-        <main style={{ maxWidth: 720, margin: "0 auto", padding: 32 }}>
+        <main style={{ maxWidth: 1220, margin: "0 auto", padding: 32 }}>
             {/* <h1>Book a lesson</h1>
 
             <p style={{ color: "#555", lineHeight: "1.6" }}>
@@ -1437,6 +1452,127 @@ export default function BookPage() {
                                     onCalculatePrice={calculateTravelCost}
                                 />
 
+                                {pendingSlot ? (
+                                    <div
+                                        style={{
+                                            position: "sticky",
+                                            bottom: 0,
+                                            marginTop: 14,
+                                            padding: 12,
+                                            border: "1px solid #e6e6e6",
+                                            borderRadius: 14,
+                                            background: "#fff",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            gap: 12,
+                                        }}
+                                    >
+                                        <div style={{ fontWeight: 900 }}>
+                                            Selected:{" "}
+                                            {formatISO(pendingSlot.date)}{" "}
+                                            <br />
+                                            {minutesToTime(pendingSlot.start)} - {minutesToTime(pendingSlot.end)}
+
+                                            {/* Recurring option */}
+                                            <div style={{ marginTop: 10, fontWeight: 700, fontSize: 14 }}>
+                                                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isRecurring}
+                                                        onChange={(e) => setIsRecurring(e.target.checked)}
+                                                    />
+                                                    Recurring weekly (for a term)
+                                                </label>
+
+                                                {isRecurring ? (
+                                                    <div style={{ marginTop: 8 }}>
+                                                        <div style={{ fontWeight: 800, marginBottom: 6 }}>Term</div>
+                                                        <select
+                                                            value={selectedTermId || ""}
+                                                            onChange={(e) => setSelectedTermId(e.target.value)}
+                                                            style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", width: "100%" }}
+                                                        >
+                                                            {terms.map((t) => (
+                                                                <option key={t.id} value={t.id}>
+                                                                    {t.name} ({formatPrettyDate(t.start_date)} - {formatPrettyDate(t.end_date)})
+                                                                </option>
+
+                                                            ))}
+                                                        </select>
+
+                                                        <div style={{ marginTop: 8, color: "#555", fontWeight: 650 }}>
+                                                            We’ll generate all weekly lessons for this term.
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        </div>
+
+
+                                        <div style={{ display: "flex", gap: 10 }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPendingSlot(null)}
+                                                style={{
+                                                    border: "1px solid #ddd",
+                                                    background: "#fff",
+                                                    borderRadius: 10,
+                                                    padding: "10px 12px",
+                                                    fontWeight: 900,
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Clear
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    if (!selectedStudentId) {
+                                                        setMessage("Please select a student first.");
+                                                        return;
+                                                    }
+
+                                                    if (lessonMode === "in_person" && !priceQuote) {
+                                                        setMessage("Please calculate the price before confirming an in-person booking.");
+                                                        return;
+                                                    }
+
+                                                    const slot = { start: pendingSlot.start, end: pendingSlot.end };
+
+                                                    // If you later re-enable recurring, switch this based on isRecurring.
+                                                    // await handleRequestBooking(pendingSlot.date, slot);
+                                                    if (isRecurring) {
+                                                        if (!selectedTermId) {
+                                                            setMessage("Please choose a term for recurring bookings.");
+                                                            return;
+                                                        }
+
+                                                        await handleRequestRecurring(pendingSlot.date, slot);
+                                                    } else {
+                                                        await handleRequestBooking(pendingSlot.date, slot);
+                                                    }
+
+
+                                                    // Clear selection after requesting
+                                                    setPendingSlot(null);
+                                                }}
+                                                style={{
+                                                    border: "0",
+                                                    background: "#1f7aea",
+                                                    color: "#fff",
+                                                    borderRadius: 10,
+                                                    padding: "10px 14px",
+                                                    fontWeight: 950,
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Click to confirm booking
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : null}
 
                                 {/* Week navigation stays, but only inside step 4 */}
                                 <div style={{ margin: "12px 0", display: "flex", alignItems: "center", gap: 12 }}>
@@ -1475,80 +1611,7 @@ export default function BookPage() {
                                     onHoverRange={setHoveredRange}
                                 />
 
-                                {pendingSlot ? (
-                                    <div
-                                        style={{
-                                            position: "sticky",
-                                            bottom: 0,
-                                            marginTop: 14,
-                                            padding: 12,
-                                            border: "1px solid #e6e6e6",
-                                            borderRadius: 14,
-                                            background: "#fff",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            gap: 12,
-                                        }}
-                                    >
-                                        <div style={{ fontWeight: 900 }}>
-                                            Selected:{" "}
-                                            {formatISO(pendingSlot.date)}{" "}<br></br>
-                                            {minutesToTime(pendingSlot.start)} - {minutesToTime(pendingSlot.end)}
-                                        </div>
 
-                                        <div style={{ display: "flex", gap: 10 }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setPendingSlot(null)}
-                                                style={{
-                                                    border: "1px solid #ddd",
-                                                    background: "#fff",
-                                                    borderRadius: 10,
-                                                    padding: "10px 12px",
-                                                    fontWeight: 900,
-                                                    cursor: "pointer",
-                                                }}
-                                            >
-                                                Clear
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                onClick={async () => {
-                                                    if (!selectedStudentId) {
-                                                        setMessage("Please select a student first.");
-                                                        return;
-                                                    }
-
-                                                    if (lessonMode === "in_person" && !priceQuote) {
-                                                        setMessage("Please calculate the price before confirming an in-person booking.");
-                                                        return;
-                                                    }
-
-                                                    const slot = { start: pendingSlot.start, end: pendingSlot.end };
-
-                                                    // If you later re-enable recurring, switch this based on isRecurring.
-                                                    await handleRequestBooking(pendingSlot.date, slot);
-
-                                                    // Clear selection after requesting
-                                                    setPendingSlot(null);
-                                                }}
-                                                style={{
-                                                    border: "0",
-                                                    background: "#1f7aea",
-                                                    color: "#fff",
-                                                    borderRadius: 10,
-                                                    padding: "10px 14px",
-                                                    fontWeight: 950,
-                                                    cursor: "pointer",
-                                                }}
-                                            >
-                                                Click to confirm booking
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : null}
                             </>
                         ) : null}
                     </div>

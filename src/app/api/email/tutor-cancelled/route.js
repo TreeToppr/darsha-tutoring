@@ -9,7 +9,7 @@ import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 export async function POST(req) {
     try {
         const body = await req.json();
-        const { bookingId } = body || {};
+        const { bookingId, cancelReason } = body || {};
 
         if (!bookingId) {
             return NextResponse.json({ error: "Missing bookingId" }, { status: 400 });
@@ -19,14 +19,14 @@ export async function POST(req) {
         const { data: booking, error: bErr } = await supabaseAdmin
             .from("bookings")
             .select(`
-        id,
-        session_date,
-        start_time,
-        end_time,
-        parent_id,
-        tutor_id,
-        students(full_name)
-      `)
+                id,
+                session_date,
+                start_time,
+                end_time,
+                parent_id,
+                tutor_id,
+                students(full_name)
+            `)
             .eq("id", bookingId)
             .single();
 
@@ -71,10 +71,11 @@ export async function POST(req) {
                             ${whenLine}
                         </p>
                         <p style="margin: 0 0 8px 0; color:#555;">Tutor: ${tutorName}</p>
+                        ${cancelReason ? `<p style="margin: 0 0 8px 0;"><strong>Reason:</strong> ${String(cancelReason)}</p>` : ""}
                         <p style="margin: 16px 0 0 0; color:#555;">Please re-book another time in DarshaTutor.</p>
                     </div>
                 `,
-                text: `Lesson cancelled by tutor: ${studentFirstName} - ${whenLine} (Tutor: ${tutorName})`,
+                text: `Lesson cancelled by tutor: ${studentFirstName} - ${whenLine} (Tutor: ${tutorName})${cancelReason ? `\nReason: ${String(cancelReason)}` : ""}`,
             });
         }
 
@@ -90,10 +91,11 @@ export async function POST(req) {
                             <strong>${studentFirstName}</strong><br/>
                             ${whenLine}
                         </p>
+                        ${cancelReason ? `<p style="margin: 0 0 8px 0;"><strong>Reason:</strong> ${String(cancelReason)}</p>` : ""}
                         <p style="margin: 16px 0 0 0; color:#555;">This is a confirmation for your records.</p>
                     </div>
                 `,
-                text: `You cancelled a lesson: ${studentFirstName} - ${whenLine}`,
+                text: `You cancelled a lesson: ${studentFirstName} - ${whenLine}${cancelReason ? `\nReason: ${String(cancelReason)}` : ""}`,
             });
         }
 

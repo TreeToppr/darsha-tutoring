@@ -84,6 +84,9 @@ export default function TutorDashboard() {
     });
     const [busySaving, setBusySaving] = useState(false);
 
+    // Tutor cancel modal (requires a reason)
+    const [cancelModal, setCancelModal] = useState(null);
+
     const onCalendarBookingClick = (b) => {
         if (!b?.id) return;
         setSelectedBookingId(b.id);
@@ -224,7 +227,7 @@ export default function TutorDashboard() {
         setUpdatingKey(null);
     };
 
-    const cancelBookingAsTutor = async (booking) => {
+    const cancelBookingAsTutor = async (booking, cancelReason) => {
         if (!booking?.id) return;
 
         setMessage("");
@@ -245,14 +248,20 @@ export default function TutorDashboard() {
             action: "booking.cancelled_by_tutor",
             entityType: "booking",
             entityId: booking.id,
-            metadata: { new_status: "cancelled" },
+            metadata: {
+                new_status: "cancelled",
+                cancel_reason: (cancelReason || "").trim() || null,
+            },
         });
 
         // send emails (parent + tutor) server-side
         const emailRes = await fetch("/api/email/tutor-cancelled", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bookingId: booking.id }),
+            body: JSON.stringify({
+                bookingId: booking.id,
+                cancelReason: (cancelReason || "").trim() || null,
+            }),
         });
 
         if (!emailRes.ok) {
@@ -567,7 +576,13 @@ export default function TutorDashboard() {
                                 updatingKey={updatingKey}
                                 onAccept={(b) => updateBookingStatus(b.id, "accepted")}
                                 onReject={(b) => updateBookingStatus(b.id, "rejected")}
-                                onCancel={cancelBookingAsTutor}
+                                onCancel={(booking) =>
+                                    setCancelModal({
+                                        booking,
+                                        reason: "",
+                                        confirmText: "",
+                                    })
+                                }
                                 onAcceptSeries={(b) => updateRecurringGroupStatus(b.recurring_group_id, "accepted")}
                                 onRejectSeries={(b) => updateRecurringGroupStatus(b.recurring_group_id, "rejected")}
                                 onMarkPaid={(b) => markPaid(b.id, null)}
@@ -610,6 +625,133 @@ export default function TutorDashboard() {
                             <Link href="/tutor/profile">Edit profile</Link>
                         </div>
                     </Panel>
+
+                    {/* Cancel modal (tutor must provide a reason) */}
+                    {cancelModal?.booking && (
+                        <div
+                            style={{
+                                position: "fixed",
+                                inset: 0,
+                                background: "rgba(0,0,0,0.35)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                zIndex: 9999,
+                                padding: 16,
+                            }}
+                            onClick={() => setCancelModal(null)}
+                        >
+                            <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                    width: "100%",
+                                    maxWidth: 520,
+                                    background: "#fff",
+                                    borderRadius: 16,
+                                    padding: 18,
+                                    border: "1px solid #eee",
+                                    boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                                }}
+                            >
+                                {(() => {
+                                    const b = cancelModal.booking;
+                                    const studentName = b?.students?.full_name || "Student";
+                                    const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
+
+                                    return (
+                                        <>
+                                            <h3 style={{ margin: 0 }}>Cancel lesson</h3>
+                                            <p style={{ margin: "8px 0 0", color: "#555" }}>
+                                                <strong>{studentName}</strong> • {formatISO(b.session_date)} • {timeRange}
+                                            </p>
+
+                                            <div style={{ marginTop: 14 }}>
+                                                <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
+                                                    Reason for cancelling (required)
+                                                </label>
+                                                <textarea
+                                                    value={cancelModal.reason || ""}
+                                                    onChange={(e) => setCancelModal((m) => ({ ...m, reason: e.target.value }))}
+                                                    placeholder="e.g., illness, emergency, timetable change, etc."
+                                                    rows={3}
+                                                    style={{
+                                                        width: "100%",
+                                                        padding: "10px 12px",
+                                                        borderRadius: 12,
+                                                        border: "1px solid #ddd",
+                                                        outline: "none",
+                                                        resize: "vertical",
+                                                    }}
+                                                />
+                                                <div style={{ marginTop: 6, color: "#777", fontSize: 12 }}>
+                                                    This will be included in the cancellation email.
+                                                </div>
+                                            </div>
+
+                                            <div style={{ marginTop: 14 }}>
+                                                <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
+                                                    Type <span style={{ fontFamily: "monospace" }}>CANCEL</span> to confirm
+                                                </label>
+                                                <input
+                                                    value={cancelModal.confirmText || ""}
+                                                    onChange={(e) => setCancelModal((m) => ({ ...m, confirmText: e.target.value }))}
+                                                    placeholder="CANCEL"
+                                                    style={{
+                                                        width: "100%",
+                                                        padding: "10px 12px",
+                                                        borderRadius: 12,
+                                                        border: "1px solid #ddd",
+                                                        outline: "none",
+                                                        fontWeight: 800,
+                                                    }}
+                                                />
+                                            </div>
+
+                                            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+                                                <button
+                                                    onClick={() => setCancelModal(null)}
+                                                    style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", background: "#fff", fontWeight: 800 }}
+                                                >
+                                                    Back
+                                                </button>
+
+                                                <button
+                                                    disabled={
+                                                        String(cancelModal.confirmText || "").trim().toUpperCase() !== "CANCEL" ||
+                                                        !(cancelModal.reason || "").trim() ||
+                                                        updatingKey === `cancel-${b.id}`
+                                                    }
+                                                    onClick={async () => {
+                                                        const reason = (cancelModal.reason || "").trim();
+                                                        setCancelModal(null);
+                                                        await cancelBookingAsTutor(b, reason);
+                                                    }}
+                                                    style={{
+                                                        padding: "10px 12px",
+                                                        borderRadius: 12,
+                                                        border: "none",
+                                                        background: "#e53935",
+                                                        color: "#fff",
+                                                        fontWeight: 900,
+                                                        opacity:
+                                                            String(cancelModal.confirmText || "").trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
+                                                                ? 1
+                                                                : 0.6,
+                                                        cursor:
+                                                            String(cancelModal.confirmText || "").trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
+                                                                ? "pointer"
+                                                                : "not-allowed",
+                                                    }}
+                                                >
+                                                    {updatingKey === `cancel-${b.id}` ? "Cancelling..." : "Confirm cancel"}
+                                                </button>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    )}
 
                     {busyModalOpen ? (
                         <div

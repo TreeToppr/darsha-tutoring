@@ -7,7 +7,7 @@ import { sendEmail } from "../../../../lib/email/resend";
 export async function POST(req) {
     try {
         const body = await req.json();
-        const { tutorEmail, studentFirstName, sessionDate, startTime, endTime, parentEmail } = body || {};
+        const { tutorEmail, studentFirstName, sessionDate, startTime, endTime, parentEmail, cancelReason } = body || {};
 
         if (!tutorEmail) {
             return NextResponse.json({ error: "Missing tutorEmail" }, { status: 400 });
@@ -24,6 +24,7 @@ export async function POST(req) {
                     ${sessionDate} • ${timeRange}
                 </p>
                 ${parentEmail ? `<p style="margin: 0 0 8px 0; color:#555;">Parent: ${parentEmail}</p>` : ""}
+                ${cancelReason ? `<p style="margin: 0 0 8px 0;"><strong>Reason:</strong> ${String(cancelReason)}</p>` : ""}
                 <p style="margin: 16px 0 0 0; color: #555;">
                     This slot is now free again in DarshaTutor.
                 </p>
@@ -34,7 +35,7 @@ export async function POST(req) {
             to: tutorEmail,
             subject,
             html,
-            text: `Lesson cancelled: ${studentFirstName || "Student"} on ${sessionDate} ${timeRange}${parentEmail ? ` (Parent: ${parentEmail})` : ""}`,
+            text: `Lesson cancelled: ${studentFirstName || "Student"} on ${sessionDate} ${timeRange}${parentEmail ? ` (Parent: ${parentEmail})` : ""}${cancelReason ? `\nReason: ${String(cancelReason)}` : ""}`,
         });
 
         return NextResponse.json({ ok: true });

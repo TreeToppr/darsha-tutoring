@@ -498,7 +498,7 @@ export default function ParentDashboard() {
         }
     };
 
-    const handleCancelBooking = async (booking, scope) => {
+    const handleCancelBooking = async (booking, scope, cancelReason) => {
         setMessage("");
         setUpdatingId(booking.id);
 
@@ -526,6 +526,7 @@ export default function ParentDashboard() {
                     booking_id_clicked: booking.id,
                     total_credit: totalCredit,
                     ledger_ids: data?.ledger_ids ?? [],
+                    cancel_reason: (cancelReason || "").trim() || null,
                 },
             });
 
@@ -549,6 +550,7 @@ export default function ParentDashboard() {
                     sessionDate: booking?.session_date,
                     startTime: booking?.start_time,
                     endTime: booking?.end_time,
+                    cancelReason: (cancelReason || "").trim() || null,
                 }),
             });
 
@@ -564,6 +566,7 @@ export default function ParentDashboard() {
                         sessionDate: booking?.session_date,
                         startTime: booking?.start_time,
                         endTime: booking?.end_time,
+                        cancelReason: (cancelReason || "").trim() || null,
                     }),
                 });
 
@@ -1218,6 +1221,7 @@ export default function ParentDashboard() {
                                 setCancelModal({
                                     booking,
                                     scope: "single",
+                                        reason: "",
                                     confirmText: "",
                                 })
                             }
@@ -1324,6 +1328,29 @@ export default function ParentDashboard() {
 
                                         <div style={{ marginTop: 14 }}>
                                             <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
+                                                Reason for cancelling (required)
+                                            </label>
+                                            <textarea
+                                                value={cancelModal.reason || ""}
+                                                onChange={(e) => setCancelModal((m) => ({ ...m, reason: e.target.value }))}
+                                                placeholder="e.g., Child is sick, timetable change, etc."
+                                                rows={3}
+                                                style={{
+                                                    width: "100%",
+                                                    padding: "10px 12px",
+                                                    borderRadius: 12,
+                                                    border: "1px solid #ddd",
+                                                    outline: "none",
+                                                    resize: "vertical",
+                                                }}
+                                            />
+                                            <div style={{ marginTop: 6, color: "#777", fontSize: 12 }}>
+                                                This will be included in the cancellation email.
+                                            </div>
+                                        </div>
+
+                                        <div style={{ marginTop: 14 }}>
+                                            <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
                                                 Type <span style={{ fontFamily: "monospace" }}>CANCEL</span> to confirm
                                             </label>
                                             <input
@@ -1350,11 +1377,16 @@ export default function ParentDashboard() {
                                             </button>
 
                                             <button
-                                                disabled={cancelModal.confirmText.trim().toUpperCase() !== "CANCEL" || updatingId === b.id}
+                                                disabled={
+                                                    cancelModal.confirmText.trim().toUpperCase() !== "CANCEL" ||
+                                                    !(cancelModal.reason || "").trim() ||
+                                                    updatingId === b.id
+                                                }
                                                 onClick={async () => {
                                                     const scope = cancelModal.scope || "single";
+                                                    const reason = (cancelModal.reason || "").trim();
                                                     setCancelModal(null);
-                                                    await handleCancelBooking(b, scope);
+                                                    await handleCancelBooking(b, scope, reason);
                                                 }}
                                                 style={{
                                                     padding: "10px 12px",
@@ -1363,8 +1395,14 @@ export default function ParentDashboard() {
                                                     background: "#e53935",
                                                     color: "#fff",
                                                     fontWeight: 900,
-                                                    opacity: cancelModal.confirmText.trim().toUpperCase() === "CANCEL" ? 1 : 0.6,
-                                                    cursor: cancelModal.confirmText.trim().toUpperCase() === "CANCEL" ? "pointer" : "not-allowed",
+                                                    opacity:
+                                                        cancelModal.confirmText.trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
+                                                            ? 1
+                                                            : 0.6,
+                                                    cursor:
+                                                        cancelModal.confirmText.trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
+                                                            ? "pointer"
+                                                            : "not-allowed",
                                                 }}
                                             >
                                                 {updatingId === b.id ? "Cancelling..." : "Confirm cancel"}
