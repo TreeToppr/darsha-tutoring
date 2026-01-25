@@ -34,16 +34,16 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-export default function PoliReturnPage() {
+// 1. Move your logic into this inner component
+function ReturnContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const [status, setStatus] = useState("verifying");
+    const [status, setStatus] = useState("verifying"); // verifying, success, failed, error
 
     useEffect(() => {
-        // POLi sends the token in the URL: ?token=...
         const token = searchParams.get("token");
 
         if (!token) {
@@ -53,7 +53,6 @@ export default function PoliReturnPage() {
 
         async function verifyPayment() {
             try {
-                // Pass the token to your new verify route
                 const res = await fetch("/api/poli/verify", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -65,11 +64,10 @@ export default function PoliReturnPage() {
                 if (data.success) {
                     setStatus("success");
 
-                    // Redirect to the specific booking page after 2 seconds
-                    // This assumes you have a page at /parent/bookings/[id]
+                    // Redirect to dashboard after 2 seconds
                     setTimeout(() => {
-                        router.push(`/parent/bookings?highlight=${data.bookingId}`);
-                        // OR: router.push("/parent/dashboard");
+                        // Adjust this path if you want to go to a specific booking
+                        router.push("/parent/dashboard");
                     }, 2000);
                 } else {
                     console.warn("Payment not completed:", data.status);
@@ -85,7 +83,7 @@ export default function PoliReturnPage() {
     }, [searchParams, router]);
 
     return (
-        <div className="p-10 text-center" style={{ padding: 40, textAlign: "center" }}>
+        <div style={{ padding: 40, textAlign: "center", minHeight: "60vh" }}>
             {status === "verifying" && <h2>Verifying your payment...</h2>}
 
             {status === "success" && (
@@ -105,9 +103,18 @@ export default function PoliReturnPage() {
             {status === "error" && (
                 <div style={{ color: "red" }}>
                     <h1>Error</h1>
-                    <p>Invalid payment token.</p>
+                    <p>Invalid or missing payment token.</p>
                 </div>
             )}
         </div>
+    );
+}
+
+// 2. Export the Main Page with Suspense
+export default function PoliReturnPage() {
+    return (
+        <Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Loading payment status...</div>}>
+            <ReturnContent />
+        </Suspense>
     );
 }
