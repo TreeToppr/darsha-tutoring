@@ -64,8 +64,9 @@ function getResendClient() {
 export async function sendEmail({ to, subject, html, text }) {
     if (!to) throw new Error("Missing recipient email");
 
-    const from = process.env.RESEND_FROM; // must be your verified domain
-    if (!from) throw new Error("Missing RESEND_FROM");
+    // const from = process.env.RESEND_FROM; // must be your verified domain
+    // if (!from) throw new Error("Missing RESEND_FROM");
+    const from = process.env.RESEND_FROM || "DarshaTutor <onboarding@resend.dev>";
 
     const resend = getResendClient();
 
