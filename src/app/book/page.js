@@ -194,6 +194,24 @@ export default function BookPage() {
         }
     };
 
+    const safePostEmail = async (url, payload) => {
+        try {
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+
+            if (!res.ok) {
+                const txt = await res.text().catch(() => "");
+                console.error("Email failed:", url, res.status, txt);
+            }
+        } catch (err) {
+            console.error("Email exception:", url, err);
+        }
+    };
+
+
     const timeStrToMinutes = (t) => timeToMinutes(String(t || "").slice(0, 5));
 
     const getSelectedStudent = () => students.find((s) => s.id === selectedStudentId) || null;
@@ -671,6 +689,44 @@ export default function BookPage() {
             },
         });
 
+        // ---- EMAILS: recurring booking requested (parent + tutor) ----
+        const parentEmail = user?.email || "";
+        const studentFullName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
+        const studentFirstName = studentFullName.split(" ")[0] || "Student";
+        const tutorName = (tutors.find((t) => t.id === selectedTutorId)?.display_name || "").trim();
+
+        const { data: tutorRow } = await supabase
+            .from("tutors")
+            .select("email")
+            .eq("id", selectedTutorId)
+            .single();
+
+        const tutorEmail = (tutorRow?.email || "").trim();
+
+        if (parentEmail) {
+            await safePostEmail("/api/email/booking-series-requested-parent", {
+                parentEmail,
+                studentFirstName,
+                tutorName,
+                startTime: minutesToTime(slot.start),
+                endTime: minutesToTime(slot.end),
+                generatedCount: bookingsToInsert.length,
+            });
+        }
+
+        if (tutorEmail) {
+            await safePostEmail("/api/email/booking-series-requested-tutor", {
+                tutorEmail,
+                studentFirstName,
+                startTime: minutesToTime(slot.start),
+                endTime: minutesToTime(slot.end),
+                generatedCount: bookingsToInsert.length,
+                parentEmail,
+            });
+        }
+        // ---- END EMAILS ----
+
+
         const studentName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
 
         const st = students.find((s) => s.id === selectedStudentId) || null;
@@ -822,6 +878,45 @@ export default function BookPage() {
                 is_recurring: false,
             },
         });
+
+        // ---- EMAILS: booking requested (parent + tutor) ----
+        const parentEmail = user?.email || "";
+        const studentFullName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
+        const studentFirstName = studentFullName.split(" ")[0] || "Student";
+        const tutorName = (tutors.find((t) => t.id === selectedTutorId)?.display_name || "").trim();
+
+        // fetch tutor email from DB
+        const { data: tutorRow } = await supabase
+            .from("tutors")
+            .select("email")
+            .eq("id", selectedTutorId)
+            .single();
+
+        const tutorEmail = (tutorRow?.email || "").trim();
+
+        if (parentEmail) {
+            await safePostEmail("/api/email/booking-requested-parent", {
+                parentEmail,
+                studentFirstName,
+                sessionDate,
+                startTime: minutesToTime(slot.start),
+                endTime: minutesToTime(slot.end),
+                tutorName,
+            });
+        }
+
+        if (tutorEmail) {
+            await safePostEmail("/api/email/booking-requested-tutor", {
+                tutorEmail,
+                studentFirstName,
+                sessionDate,
+                startTime: minutesToTime(slot.start),
+                endTime: minutesToTime(slot.end),
+                parentEmail,
+            });
+        }
+        // ---- END EMAILS ----
+
 
         // show a friendly popup instead of a wall-of-text message
         const studentName = (students.find((s) => s.id === selectedStudentId)?.full_name || "").trim();
