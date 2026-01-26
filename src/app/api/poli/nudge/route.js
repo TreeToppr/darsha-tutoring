@@ -10,10 +10,19 @@ function requireEnv(name) {
 }
 
 export async function POST(request) {
+
+    console.log("POLI NUDGE HIT", new Date().toISOString(), {
+        url: request.url,
+        contentType: request.headers.get("content-type"),
+        userAgent: request.headers.get("user-agent"),
+    });
+
     try {
         // POLi sends x-www-form-urlencoded with Token, so formData is correct
         const formData = await request.formData();
         const token = formData.get("Token");
+
+        console.log("POLI NUDGE TOKEN", token);
 
         if (!token) return new Response("No Token", { status: 400 });
 
@@ -79,3 +88,5 @@ export async function POST(request) {
         return new Response("OK", { status: 200 });
     }
 }
+
+

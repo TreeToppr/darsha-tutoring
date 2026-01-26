@@ -90,6 +90,9 @@ export async function POST(req) {
 
         console.log("POLi initiate payload:", JSON.stringify(initiateBody, null, 2));
 
+        console.log("POLI INITIATE BODY", JSON.stringify(initiateBody, null, 2));
+
+
         const res = await fetch(`${baseUrl}/v2/Transaction/Initiate`, {
             method: "POST",
             headers: {

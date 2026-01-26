@@ -110,21 +110,6 @@ export default function PaymentPopup({
                         </button>
                     ) : null}
 
-                    {/* <button
-                        onClick={onStartPoliPay}
-                        style={{
-                            padding: "10px 14px",
-                            borderRadius: 10,
-                            border: "1px solid #0b5fff",
-                            background: "#0b5fff",
-                            color: "white",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                        }}
-                    >
-                        Pay with POLi
-                    </button> */}
-
                     <button
                         type="button"
                         onClick={onClose}
