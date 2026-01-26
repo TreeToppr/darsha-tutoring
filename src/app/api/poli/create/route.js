@@ -11,23 +11,20 @@ function requireEnv(name) {
 }
 
 function buildPoliInitiateBody({ amount, merchantReference }) {
-    const homepageUrl = requireEnv("POLI_HOMEPAGE_URL");
+    const homepageUrl = requireEnv("POLI_HOMEPAGE_URL").replace(/\/$/, "");
     const successUrl = requireEnv("POLI_SUCCESS_URL");
     const failureUrl = requireEnv("POLI_FAILURE_URL");
     const cancelUrl = process.env.POLI_CANCEL_URL || failureUrl;
+
+    const notificationUrl = `${homepageUrl}/api/poli/nudge`;
 
     return {
         Amount: Number(amount).toFixed(2),
         CurrencyCode: "NZD",
         MerchantReference: merchantReference,
 
-        // keep the variants if you want (harmless):
-        // HomepageURL: homepageUrl,
-        // HomePageURL: homepageUrl,
-        // HomepageUrl: homepageUrl,
-        // HomePageUrl: homepageUrl,
-
         MerchantHomepageURL: homepageUrl,
+        NotificationURL: notificationUrl,
 
         SuccessURL: successUrl,
         SuccessUrl: successUrl,
@@ -39,6 +36,7 @@ function buildPoliInitiateBody({ amount, merchantReference }) {
         CancellationUrl: cancelUrl,
     };
 }
+
 
 export async function POST(req) {
     try {
