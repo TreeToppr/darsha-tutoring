@@ -173,16 +173,23 @@ export default function BookPage() {
         if (!paymentPopup?.bookingId) return;
 
         try {
-            const res = await fetch("/api/poli/initiate", {
+            const { data: { session } } = await supabase.auth.getSession();
+            const accessToken = session?.access_token;
+            if (!accessToken) throw new Error("Not signed in");
+
+            const res = await fetch("/api/poli/create", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                },
                 body: JSON.stringify({ bookingId: paymentPopup.bookingId }),
             });
 
-            const json = await res.json();
+            const json = await res.json().catch(() => ({}));
 
-            if (!res.ok) {
-                console.error("POLi initiate error:", json);
+            if (!res.ok || !json?.navigateUrl) {
+                console.error("POLi create error:", json);
                 alert(json?.error || "POLi payment failed to start.");
                 return;
             }
@@ -190,7 +197,7 @@ export default function BookPage() {
             window.location.href = json.navigateUrl;
         } catch (err) {
             console.error(err);
-            alert("Could not start POLi payment.");
+            alert(err?.message || "Could not start POLi payment.");
         }
     };
 
@@ -375,6 +382,36 @@ export default function BookPage() {
                 });
             });
         }
+
+        // ---- subtract Google Calendar busy (if tutor connected) ----
+        try {
+            const dayStart = new Date(`${selectedDate}T00:00:00`);
+            const dayEnd = new Date(`${selectedDate}T23:59:59`);
+
+            const googleRes = await fetch(
+                `/api/tutors/google-freebusy?tutorId=${encodeURIComponent(tutor.id)}&timeMin=${encodeURIComponent(dayStart.toISOString())}&timeMax=${encodeURIComponent(dayEnd.toISOString())}`
+            );
+
+            const googleJson = await googleRes.json().catch(() => null);
+
+            if (googleRes.ok && googleJson?.ok && Array.isArray(googleJson.busy)) {
+                const googleBusy = googleJson.busy.map((b) => ({
+                    start: new Date(b.start).getTime(),
+                    end: new Date(b.end).getTime(),
+                }));
+
+                generated = generated.filter((slot) => {
+                    const slotStart = new Date(`${selectedDate}T${minutesToTime(slot.start)}:00`).getTime();
+                    const slotEnd = new Date(`${selectedDate}T${minutesToTime(slot.end)}:00`).getTime();
+
+                    return !googleBusy.some((gb) => slotStart < gb.end && slotEnd > gb.start);
+                });
+            }
+        } catch (e) {
+            // If Google fails, do NOT break booking.
+            console.error("Google freebusy failed:", e?.message || e);
+        }
+        // ---- end Google busy ----
 
         // existing bookings (we still block booking them, but we’ll DISPLAY them on the calendar)
         const { data: busy, error: busyErr } = await supabase
@@ -617,7 +654,7 @@ export default function BookPage() {
 
 
         for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 7)) {
-            const iso = dt.toISOString().split("T")[0];
+            const iso = toAucklandISODate(dt);
 
             // skip public holidays automatically
             if (holidaySet.has(iso)) continue;
@@ -1043,6 +1080,15 @@ export default function BookPage() {
     const maxDate = new Date();
     maxDate.setDate(today.getDate() + 30);
 
+    const toAucklandISODate = (dateObj) => {
+        return new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Pacific/Auckland",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(dateObj); // YYYY-MM-DD
+    };
+
     const weekStart = (() => {
         const base = new Date();
         base.setDate(base.getDate() + monthOffset * 7);
@@ -1055,7 +1101,7 @@ export default function BookPage() {
         const d = new Date(weekStart);
         d.setDate(weekStart.getDate() + i);
         return {
-            iso: d.toISOString().split("T")[0],
+            iso: toAucklandISODate(d),
             short: d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" }),
         };
     });

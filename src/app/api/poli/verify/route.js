@@ -129,10 +129,9 @@ export async function POST(request) {
         // 2. Check if the payment was actually successful
         const isSuccess = transaction.TransactionStatusCode === "Completed";
 
-        // Extract UUID from "booking-UUID"
-        const bookingId = transaction.MerchantReference.replace("booking-", "");
+        const merchantRef = String(transaction.MerchantReference || "");
 
-        // 3. Update Supabase
+        // 3. Build update payload (used for both single and bulk)
         const updatePayload = {
             poli_status: transaction.TransactionStatusCode,
             poli_transaction_ref: transaction.TransactionRefNo,
@@ -140,10 +139,59 @@ export async function POST(request) {
         };
 
         if (isSuccess) {
-            // updatePayload.status = "confirmed"; // Adjust if your confirmed status is different
             updatePayload.payment_status = "paid";
             updatePayload.paid_at = new Date().toISOString();
         }
+
+        // Two supported references:
+        // - booking-<uuid>  -> single booking
+        // - intent-<uuid>   -> poli_payment_intents row (bulk pay)
+
+        if (merchantRef.startsWith("intent-")) {
+            const intentId = merchantRef.replace("intent-", "");
+
+            const { data: intent, error: intentErr } = await supabaseAdmin
+                .from("poli_payment_intents")
+                .select("id, booking_ids")
+                .eq("id", intentId)
+                .single();
+
+            if (intentErr || !intent?.id) {
+                console.error("Intent lookup failed:", intentErr);
+                return NextResponse.json({ error: "Payment intent not found" }, { status: 404 });
+            }
+
+            // Update intent for traceability
+            await supabaseAdmin
+                .from("poli_payment_intents")
+                .update({
+                    status: transaction.TransactionStatusCode,
+                    poli_transaction_ref: transaction.TransactionRefNo,
+                })
+                .eq("id", intentId);
+
+            if (isSuccess && Array.isArray(intent.booking_ids) && intent.booking_ids.length) {
+                const { error: bulkErr } = await supabaseAdmin
+                    .from("bookings")
+                    .update(updatePayload)
+                    .in("id", intent.booking_ids);
+
+                if (bulkErr) {
+                    console.error("Bulk booking update failed:", bulkErr);
+                    return NextResponse.json({ error: "Failed to update bookings", details: bulkErr }, { status: 500 });
+                }
+            }
+
+            return NextResponse.json({
+                success: isSuccess,
+                status: transaction.TransactionStatusCode,
+                intentId,
+                bookingIds: intent.booking_ids || [],
+            });
+        }
+
+        // Default: single booking
+        const bookingId = merchantRef.startsWith("booking-") ? merchantRef.replace("booking-", "") : merchantRef;
 
         const { error: dbError } = await supabaseAdmin
             .from("bookings")
@@ -155,11 +203,7 @@ export async function POST(request) {
             return NextResponse.json({ error: "Failed to update booking", details: dbError }, { status: 500 });
         }
 
-        return NextResponse.json({
-            success: isSuccess,
-            status: transaction.TransactionStatusCode,
-            bookingId
-        });
+        return NextResponse.json({ success: isSuccess, status: transaction.TransactionStatusCode, bookingId });
 
     } catch (err) {
         console.error("Verify API error:", err);

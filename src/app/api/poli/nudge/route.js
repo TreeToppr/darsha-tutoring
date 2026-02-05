@@ -49,14 +49,10 @@ export async function POST(request) {
 
         const status = tx?.TransactionStatusCode;
         const merchantRef = String(tx?.MerchantReference || "");
-        const bookingId = merchantRef.startsWith("booking-")
-            ? merchantRef.replace("booking-", "")
-            : merchantRef;
 
-        if (!bookingId) {
-            console.error("No bookingId parsed from MerchantReference:", merchantRef);
-            return new Response("OK", { status: 200 });
-        }
+        // Two supported references:
+        // - booking-<uuid>  -> single booking
+        // - intent-<uuid>   -> poli_payment_intents row (bulk pay)
 
         const updatePayload = {
             poli_status: status,
@@ -69,6 +65,52 @@ export async function POST(request) {
             updatePayload.paid_at = new Date().toISOString();
         } else if (status === "Cancelled" || status === "Failed" || status === "TimedOut") {
             updatePayload.payment_status = "unpaid";
+        }
+
+        if (merchantRef.startsWith("intent-")) {
+            const intentId = merchantRef.replace("intent-", "");
+
+            const { data: intent, error: intentReadErr } = await supabaseAdmin
+                .from("poli_payment_intents")
+                .select("id, booking_ids")
+                .eq("id", intentId)
+                .single();
+
+            if (intentReadErr || !intent?.id) {
+                console.error("Nudge could not read intent:", intentReadErr);
+                return new Response("OK", { status: 200 });
+            }
+
+            // Update intent status for traceability
+            await supabaseAdmin
+                .from("poli_payment_intents")
+                .update({
+                    status,
+                    poli_transaction_ref: tx?.TransactionRefNo || null,
+                })
+                .eq("id", intentId);
+
+            // If Completed, mark all linked bookings as paid
+            if (status === "Completed" && Array.isArray(intent.booking_ids) && intent.booking_ids.length) {
+                const { error: bulkErr } = await supabaseAdmin
+                    .from("bookings")
+                    .update(updatePayload)
+                    .in("id", intent.booking_ids);
+
+                if (bulkErr) console.error("Nudge bulk booking update failed:", bulkErr);
+            }
+
+            return new Response("OK", { status: 200 });
+        }
+
+        // Default: single booking reference
+        const bookingId = merchantRef.startsWith("booking-")
+            ? merchantRef.replace("booking-", "")
+            : merchantRef;
+
+        if (!bookingId) {
+            console.error("No bookingId parsed from MerchantReference:", merchantRef);
+            return new Response("OK", { status: 200 });
         }
 
         const { error } = await supabaseAdmin

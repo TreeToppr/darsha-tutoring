@@ -31,6 +31,65 @@ export default function TutorDashboard() {
     const [weekOffset, setWeekOffset] = useState(0);
     const [busyBlocks, setBusyBlocks] = useState([]);
 
+    const [googleConnected, setGoogleConnected] = useState(false);
+    const [busyDate, setBusyDate] = useState("");
+    const [busyStart, setBusyStart] = useState("09:00");
+    const [busyEnd, setBusyEnd] = useState("10:00");
+    const [busyTitle, setBusyTitle] = useState("Busy - DarshaTutor");
+
+    const createBusyBlock = async () => {
+        setMessage("");
+        const token = await getSupabaseAccessToken();
+
+        const res = await fetch("/api/tutor/busy-blocks", {
+            method: "POST",
+            headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+                date: busyDate,
+                startTime: busyStart,
+                endTime: busyEnd,
+                title: busyTitle,
+                calendarId: "primary",
+            }),
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            setMessage(json.error || "Failed to create busy block");
+            return;
+        }
+
+        setMessage("Busy block created (DB + Google).");
+    };
+
+    const startGoogleConnectTutor = async () => {
+        const res = await fetch("/api/google/oauth/start", {
+            method: "POST",
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+            alert(json.error || "Failed to start Google connection");
+            return;
+        }
+
+        // Redirect tutor to Google
+        window.location.href = json.url;
+    };
+
+    const checkGoogleConnected = async () => {
+        try {
+            const token = await getSupabaseAccessToken();
+            const res = await fetch("/api/google/calendar/list", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setGoogleConnected(res.ok);
+        } catch {
+            setGoogleConnected(false);
+        }
+    };
+
     const calendarBookings = useMemo(() => {
         return (bookings || []).filter((b) => {
             const s = String(b?.status || "").toLowerCase();
@@ -142,6 +201,8 @@ export default function TutorDashboard() {
     const loadBusyBlocksForWeek = async (tutorId, weekOffsetValue) => {
         if (!tutorId) return;
 
+        await checkGoogleConnected();
+
         const now = new Date();
         const weekStart = startOfWeekMonday(now);
         weekStart.setDate(weekStart.getDate() + weekOffsetValue * 7);
@@ -176,10 +237,32 @@ export default function TutorDashboard() {
         setMessage("");
         setUpdatingKey(`booking-${bookingId}-${newStatus}`);
 
-        const { error } = await supabase
-            .from("bookings")
-            .update({ status: newStatus })
-            .eq("id", bookingId);
+        // const { error } = await supabase
+        //     .from("bookings")
+        //     .update({ status: newStatus })
+        //     .eq("id", bookingId);
+
+        if (newStatus === "accepted") {
+            const token = await getSupabaseAccessToken();
+            const res = await fetch("/api/tutor/bookings/accept", {
+                method: "POST",
+                headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ bookingId }),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setMessage(json.error || "Accept failed");
+                setUpdatingKey(null);
+                return;
+            }
+        } else {
+            const { error } = await supabase.from("bookings").update({ status: newStatus }).eq("id", bookingId);
+            if (error) {
+                setMessage(error.message);
+                setUpdatingKey(null);
+                return;
+            }
+        }
 
         if (error) {
             setMessage(error.message);
@@ -501,6 +584,51 @@ export default function TutorDashboard() {
                         {message}
                     </div>
                 ) : null}
+
+                <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                    <h3 style={{ margin: "0 0 8px 0" }}>Google Calendar</h3>
+
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 14 }}>
+                            Status: <b>{googleConnected ? "Connected" : "Not connected"}</b>
+                        </div>
+                        <button onClick={startGoogleConnectTutor} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>
+                            Connect / Reconnect Google
+                        </button>
+                        <button onClick={checkGoogleConnected} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>
+                            Refresh status
+                        </button>
+                    </div>
+
+                    <div style={{ marginTop: 12, display: "grid", gap: 8, maxWidth: 420 }}>
+                        <label>
+                            Date
+                            <input value={busyDate} onChange={(e) => setBusyDate(e.target.value)} type="date" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
+                        </label>
+
+                        <label>
+                            Start
+                            <input value={busyStart} onChange={(e) => setBusyStart(e.target.value)} type="time" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
+                        </label>
+
+                        <label>
+                            End
+                            <input value={busyEnd} onChange={(e) => setBusyEnd(e.target.value)} type="time" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
+                        </label>
+
+                        <label>
+                            Title
+                            <input value={busyTitle} onChange={(e) => setBusyTitle(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
+                        </label>
+
+                        <button onClick={createBusyBlock} disabled={!googleConnected || !busyDate} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff", cursor: "pointer" }}>
+                            Add busy block
+                        </button>
+
+                        {!googleConnected && <div style={{ fontSize: 12, color: "#777" }}>Reconnect Google (tutor scope) to enable creating events.</div>}
+                    </div>
+                </div>
+
 
                 <div style={{ display: "block", gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 0.65fr)", gap: 14, marginTop: 14, alignItems: "start" }}>
                     <div style={{ minWidth: 0 }}>

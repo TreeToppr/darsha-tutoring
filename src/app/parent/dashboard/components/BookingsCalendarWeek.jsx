@@ -67,7 +67,9 @@ export default function BookingsCalendarWeek({
                     marginBottom: 12,
                 }}
             >
-                <div style={{ fontWeight: 950 }}>Calendar (week)</div>
+                <div style={{ fontWeight: 950 }}>Your Calendar View</div>
+
+                <p>This is your calendar view <strong>only</strong>, to see tutor availbility, go to <strong>book</strong></p>
 
                 <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
 

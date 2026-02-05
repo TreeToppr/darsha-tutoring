@@ -14,6 +14,35 @@ export default function ParentTutorsPage() {
     const [tutorStats, setTutorStats] = useState({});
     const [query, setQuery] = useState("");
 
+    const startPoliPayForTutorOwed = async (tutorId) => {
+        try {
+            setMessage("");
+            if (!tutorId) throw new Error("Missing tutorId");
+
+            const { data: { session } } = await supabase.auth.getSession();
+            const accessToken = session?.access_token;
+            if (!accessToken) throw new Error("Not signed in");
+
+            const res = await fetch("/api/poli/create", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ scope: "tutor_owed", tutorId }),
+            });
+
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json?.navigateUrl) {
+                throw new Error(json?.error || "POLi payment could not be started.");
+            }
+
+            window.location.href = json.navigateUrl;
+        } catch (e) {
+            setMessage(e?.message || "POLi payment could not be started.");
+        }
+    };
+
     useEffect(() => {
         const init = async () => {
             setMessage("");
@@ -37,7 +66,7 @@ export default function ParentTutorsPage() {
 
             const { data: bookingsData, error: bookingsErr } = await supabase
                 .from("bookings")
-                .select("tutor_id, payment_status, amount_total")
+                .select("tutor_id, status, payment_status, amount_total")
                 .eq("parent_id", user.id);
 
             if (bookingsErr) {
@@ -53,10 +82,12 @@ export default function ParentTutorsPage() {
 
                     stats[tid].bookingsCount += 1;
 
+                    const status = String(b?.status || "").toLowerCase();
                     const payStatus = String(b?.payment_status || "unpaid").toLowerCase();
                     const total = Number(b?.amount_total || 0);
 
-                    if (payStatus !== "paid") {
+                    // Only count genuinely payable sessions (accepted + unpaid)
+                    if (["accepted", "requested"].includes(status) && payStatus !== "paid") {
                         stats[tid].unpaidCount += 1;
                         if (Number.isFinite(total) && total > 0) stats[tid].owedTotal += total;
                     }
@@ -211,15 +242,50 @@ export default function ParentTutorsPage() {
                                     </div>
 
                                     {tutorStats[t.id].unpaidCount > 0 ? (
-                                        <div>
-                                            <span style={{ color: "#666", fontWeight: 700 }}>Unpaid:</span>{" "}
-                                            {tutorStats[t.id].unpaidCount}
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 10,
+                                                flexWrap: "wrap", // keeps it sane on mobile
+                                            }}
+                                        >
+                                            {/* LEFT side text */}
+                                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                                <span style={{ color: "#666", fontWeight: 700 }}>Unpaid:</span>
+                                                <span>{tutorStats[t.id].unpaidCount}</span>
+
+                                                {tutorStats[t.id].owedTotal > 0 ? (
+                                                    <>
+                                                        <span style={{ color: "#999" }}>·</span>
+                                                        <span style={{ fontWeight: 900, color: "#ee2222" }}>
+                                                            ${tutorStats[t.id].owedTotal.toFixed(2)}
+                                                        </span>
+                                                        <span>owed</span>
+                                                    </>
+                                                ) : null}
+                                            </div>
+
+                                            {/* RIGHT side button */}
                                             {tutorStats[t.id].owedTotal > 0 ? (
-                                                <>
-                                                    {" "}·{" "}
-                                                    <span style={{ fontWeight: 900, color: "#ee2222" }}>${tutorStats[t.id].owedTotal.toFixed(2)}</span>{" "}
-                                                    owed
-                                                </>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => startPoliPayForTutorOwed(t.id)}
+                                                    style={{
+                                                        marginLeft: "auto", // 👈 pushes to far right of the row
+                                                        padding: "7px 10px",
+                                                        borderRadius: 10,
+                                                        border: "1px solid #1f7aea",
+                                                        background: "#1f7aea",
+                                                        color: "#fff",
+                                                        fontWeight: 900,
+                                                        cursor: "pointer",
+                                                        whiteSpace: "nowrap",
+                                                    }}
+                                                    title="Pay all unpaid lessons for this tutor"
+                                                >
+                                                    Pay (POLi)
+                                                </button>
                                             ) : null}
                                         </div>
                                     ) : null}

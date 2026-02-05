@@ -258,6 +258,36 @@ export default function ParentDashboard() {
     const [googleCalendars, setGoogleCalendars] = useState([]);
     const [googleSelected, setGoogleSelected] = useState(null);
     const [googleConnected, setGoogleConnected] = useState(false);
+
+    const startPoliPayForTutorOwed = async (tutorId) => {
+        try {
+            setMessage("");
+            if (!tutorId) throw new Error("Missing tutorId");
+
+            const { data: { session } } = await supabase.auth.getSession();
+            const accessToken = session?.access_token;
+            if (!accessToken) throw new Error("Not signed in");
+
+            const res = await fetch("/api/poli/create", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ scope: "tutor_owed", tutorId }),
+            });
+
+            const json = await res.json().catch(() => ({}));
+
+            if (!res.ok || !json?.navigateUrl) {
+                throw new Error(json?.error || "POLi payment could not be started.");
+            }
+
+            window.location.href = json.navigateUrl;
+        } catch (e) {
+            setMessage(e?.message || "POLi payment could not be started.");
+        }
+    };
     const [compareBusy, setCompareBusy] = useState([]); // busy intervals
     const [googlePreviewEvents, setGooglePreviewEvents] = useState([]);
     const [googleAppliedEvents, setGoogleAppliedEvents] = useState([]);
@@ -1232,6 +1262,7 @@ export default function ParentDashboard() {
                                     confirmText: "",
                                 })
                             }
+                            onPayNow={(booking) => startPoliPayForTutorOwed(booking?.tutor_id)}
                         />
                     )}
 

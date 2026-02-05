@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireUserIdFromBearer } from "../../google/_util";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,32 +41,87 @@ function buildPoliInitiateBody({ amount, merchantReference }) {
 
 export async function POST(req) {
     try {
-        const { bookingId } = await req.json();
+        const body = await req.json().catch(() => ({}));
+        const bookingId = body?.bookingId || null;
+        const tutorId = body?.tutorId || null;
+        const scope = String(body?.scope || "single");
 
-        if (!bookingId) {
-            return NextResponse.json({ ok: false, error: "Missing bookingId" }, { status: 400 });
-        }
+        // Always require auth for POLi initiation.
+        // (Yes, we use service role below, but we still verify the caller is signed in.)
+        const userId = await requireUserIdFromBearer(req);
 
-        // Server-side lookup of booking -> amount
+        // Server-side lookup of booking(s) -> amount
         const supabase = createClient(
             requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
             requireEnv("SUPABASE_SERVICE_ROLE_KEY") // must exist in .env.local (server only)
         );
 
-        const { data: booking, error: bookingErr } = await supabase
-            .from("bookings")
-            .select("amount_total") // <-- change this column name to whatever you actually store
-            .eq("id", bookingId)
-            .single();
+        let amount = null;
+        let merchantReference = null;
 
-        if (bookingErr || !booking) {
-            return NextResponse.json(
-                { ok: false, error: "Booking not found", details: bookingErr?.message },
-                { status: 404 }
-            );
+        if (bookingId) {
+            const { data: booking, error: bookingErr } = await supabase
+                .from("bookings")
+                .select("id, parent_id, amount_total")
+                .eq("id", bookingId)
+                .single();
+
+            if (bookingErr || !booking) {
+                return NextResponse.json(
+                    { ok: false, error: "Booking not found", details: bookingErr?.message },
+                    { status: 404 }
+                );
+            }
+
+            if (booking.parent_id !== userId) {
+                return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+            }
+
+            amount = booking.amount_total;
+            merchantReference = `booking-${bookingId}`;
+        } else if (tutorId && scope === "tutor_owed") {
+            // Pay the full amount owed to a tutor (all unpaid accepted bookings for this parent + tutor).
+            const { data: rows, error: rowsErr } = await supabase
+                .from("bookings")
+                .select("id, amount_total")
+                .eq("parent_id", userId)
+                .eq("tutor_id", tutorId)
+                .in("status", ["accepted", "requested"])
+                .neq("payment_status", "paid");
+
+            if (rowsErr) {
+                return NextResponse.json({ ok: false, error: rowsErr.message }, { status: 500 });
+            }
+
+            const bookingIds = (rows || []).map((r) => r.id);
+            const total = (rows || []).reduce((sum, r) => sum + Number(r?.amount_total || 0), 0);
+
+            if (!bookingIds.length || !(total > 0)) {
+                return NextResponse.json({ ok: false, error: "Nothing to pay" }, { status: 400 });
+            }
+
+            // Create a lightweight payment intent row so nudge/verify can mark multiple bookings paid.
+            const { data: intent, error: intentErr } = await supabase
+                .from("poli_payment_intents")
+                .insert({
+                    parent_id: userId,
+                    tutor_id: tutorId,
+                    booking_ids: bookingIds,
+                    amount_total: total,
+                    status: "Created",
+                })
+                .select("id")
+                .single();
+
+            if (intentErr || !intent?.id) {
+                return NextResponse.json({ ok: false, error: "Failed to create payment intent", details: intentErr?.message }, { status: 500 });
+            }
+
+            amount = total;
+            merchantReference = `intent-${intent.id}`;
+        } else {
+            return NextResponse.json({ ok: false, error: "Missing bookingId (single) or tutorId+scope=tutor_owed" }, { status: 400 });
         }
-
-        const amount = booking.amount_total;
 
         const amountNumber = Number(amount);
 
@@ -75,9 +131,7 @@ export async function POST(req) {
                 { status: 400 }
             );
         }
-        console.log("booking row:", booking);
-
-        const merchantReference = `booking-${bookingId}`;
+        // Note: we don't log sensitive booking rows here.
 
         const baseUrl = requireEnv("POLI_API_BASE_URL").replace(/\/$/, "");
         const initiateBody = buildPoliInitiateBody({ amount, merchantReference });

@@ -41,7 +41,12 @@ export async function POST(req) {
         }
 
         // Read-only is enough for listing calendars + freeBusy.
-        const scope = encodeURIComponent("https://www.googleapis.com/auth/calendar.readonly");
+        const scope = encodeURIComponent(
+            context === "tutor_busy"
+                ? "https://www.googleapis.com/auth/calendar"
+                : "https://www.googleapis.com/auth/calendar.readonly"
+        );
+
 
         const url =
             "https://accounts.google.com/o/oauth2/v2/auth" +

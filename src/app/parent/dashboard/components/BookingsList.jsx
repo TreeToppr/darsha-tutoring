@@ -56,7 +56,7 @@ const copyToClipboard = async (text) => {
 const statusPillStyle = (status) => {
     if (status === "accepted") return pill("#e9f7ef", "#b7e1c5", "#1b5e20");
     if (status === "requested") return pill("#fff7e6", "#ffe0a3", "#8a5a00");
-    if (status === "declined") return pill("#fdecea", "#f5c2c7", "#8a1f11");
+    if (status === "declined" || status === "rejected") return pill("#fdecea", "#f5c2c7", "#8a1f11");
     if (status === "cancelled") return pill("#f5f5f5", "#e0e0e0", "#555");
     return pill("#eef2ff", "#c7d2fe", "#1f3a8a");
 };
@@ -66,7 +66,7 @@ const paymentPillStyle = (paymentStatus) => {
     return pill("#fff7e6", "#ffe0a3", "#8a5a00");
 };
 
-export default function BookingsList({ bookings, selectedBookingId, onCancel }) {
+export default function BookingsList({ bookings, selectedBookingId, onCancel, onPayNow }) {
     const rows = Array.isArray(bookings) ? bookings : [];
 
     if (!rows.length) {
@@ -92,7 +92,18 @@ export default function BookingsList({ bookings, selectedBookingId, onCancel }) 
                     // - If payment_status === "paid", owed is 0
                     // - Otherwise owed = amount_total (if present)
                     const total = Number(b?.amount_total || 0);
-                    const owed = b?.payment_status === "paid" ? 0 : total;
+
+                    const status = String(b?.status || "").toLowerCase();
+                    const payStatus = String(b?.payment_status || "unpaid").toLowerCase();
+
+                    // New rule: allow paying requested + accepted (but never rejected/declined/cancelled)
+                    const isPayable =
+                        ["accepted", "requested"].includes(status) &&
+                        payStatus !== "paid" &&
+                        total > 0;
+
+                    const owed = isPayable ? total : 0;
+                    const canPayNow = isPayable;
 
                     const bankMasked = b?.tutors?.bank_account_masked || "";
                     const bankFull = b?.tutors?.tutor_payment_details?.bank_account || "";
@@ -187,24 +198,54 @@ export default function BookingsList({ bookings, selectedBookingId, onCancel }) 
                             >
                                 <div style={{ fontWeight: 900 }}>Payment</div>
 
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, color: "#333", fontSize: 13 }}>
-                                    <div>
-                                        <span style={{ color: "#666" }}>Total:</span> <span style={{ fontWeight: 900 }}>{formatMoneyNZD(total)}</span>
-                                    </div>
-
-                                    <div>
-                                        <span style={{ color: "#666" }}>Owed:</span> <span style={{ fontWeight: 900 }}>{formatMoneyNZD(owed)}</span>
-                                    </div>
-
-                                    {/* {b.payment_method ? (
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: 12,
+                                        color: "#333",
+                                        fontSize: 13,
+                                    }}
+                                >
+                                    {/* LEFT side */}
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
                                         <div>
-                                            <span style={{ color: "#666" }}>Method:</span> <span style={{ fontWeight: 900 }}>{String(b.payment_method)}</span>
+                                            <span style={{ color: "#666" }}>Total:</span>{" "}
+                                            <span style={{ fontWeight: 900 }}>{formatMoneyNZD(total)}</span>
                                         </div>
-                                    ) : null} */}
+
+                                        <div>
+                                            <span style={{ color: "#666" }}>Owed:</span>{" "}
+                                            <span style={{ fontWeight: 900 }}>{formatMoneyNZD(owed)}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* RIGHT side */}
+                                    {canPayNow ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => onPayNow?.(b)}
+                                            style={{
+                                                padding: "7px 10px",
+                                                borderRadius: 10,
+                                                border: "1px solid #1f7aea",
+                                                background: "#1f7aea",
+                                                color: "#fff",
+                                                fontWeight: 900,
+                                                cursor: "pointer",
+                                                whiteSpace: "nowrap",
+                                            }}
+                                            title="Pay all unpaid lessons for this tutor"
+                                        >
+                                            Pay (POLi)
+                                        </button>
+                                    ) : null}
                                 </div>
 
+
                                 {/* Bank transfer details (only show if unpaid and we have a bank account) */}
-                                {owed > 0 && (bankFull || bankMasked) ? (
+                                {/* {owed > 0 && (bankFull || bankMasked) ? (
                                     <div style={{ marginTop: 6, color: "#444", fontSize: 13 }}>
                                         <div style={{ fontWeight: 900, marginBottom: 4 }}>Bank transfer details</div>
 
@@ -221,9 +262,9 @@ export default function BookingsList({ bookings, selectedBookingId, onCancel }) 
                                             </span>
                                         </div>
 
-                                        {/* <div style={{ marginTop: 6, color: "#666" }}>
+                                        <div style={{ marginTop: 6, color: "#666" }}>
                                             Reference: <span style={{ fontFamily: "monospace" }}>{b.id}</span>
-                                        </div> */}
+                                        </div>
 
                                         {(tutorEmail || tutorPhone) ? (
                                             <div style={{ marginTop: 6, color: "#666" }}>
@@ -232,7 +273,7 @@ export default function BookingsList({ bookings, selectedBookingId, onCancel }) 
                                             </div>
                                         ) : null}
                                     </div>
-                                ) : null}
+                                ) : null} */}
 
                             </div>
 
