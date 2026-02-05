@@ -63,18 +63,24 @@ export default function TutorDashboard() {
     };
 
     const startGoogleConnectTutor = async () => {
+        const token = await getSupabaseAccessToken();
+
         const res = await fetch("/api/google/oauth/start", {
             method: "POST",
+            headers: {
+                "content-type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ context: "tutor_busy" }),
         });
 
-        const json = await res.json();
+        const json = await res.json().catch(() => ({}));
 
         if (!res.ok) {
             alert(json.error || "Failed to start Google connection");
             return;
         }
 
-        // Redirect tutor to Google
         window.location.href = json.url;
     };
 

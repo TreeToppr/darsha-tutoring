@@ -388,9 +388,32 @@ export default function BookPage() {
             const dayStart = new Date(`${selectedDate}T00:00:00`);
             const dayEnd = new Date(`${selectedDate}T23:59:59`);
 
-            const googleRes = await fetch(
-                `/api/tutors/google-freebusy?tutorId=${encodeURIComponent(tutor.id)}&timeMin=${encodeURIComponent(dayStart.toISOString())}&timeMax=${encodeURIComponent(dayEnd.toISOString())}`
-            );
+            const { data: { session } } = await supabase.auth.getSession();
+            const accessToken = session?.access_token;
+
+            if (accessToken) {
+                const googleRes = await fetch(
+                    `/api/tutors/google-freebusy?tutorId=${encodeURIComponent(tutor.id)}&timeMin=${encodeURIComponent(dayStart.toISOString())}&timeMax=${encodeURIComponent(dayEnd.toISOString())}`,
+                    {
+                        headers: { Authorization: `Bearer ${accessToken}` },
+                    }
+                );
+
+                const googleJson = await googleRes.json().catch(() => null);
+
+                if (googleRes.ok && googleJson?.ok && Array.isArray(googleJson.busy)) {
+                    const googleBusy = googleJson.busy.map((b) => ({
+                        start: new Date(b.start).getTime(),
+                        end: new Date(b.end).getTime(),
+                    }));
+
+                    generated = generated.filter((slot) => {
+                        const slotStart = new Date(`${selectedDate}T${minutesToTime(slot.start)}:00`).getTime();
+                        const slotEnd = new Date(`${selectedDate}T${minutesToTime(slot.end)}:00`).getTime();
+                        return !googleBusy.some((gb) => slotStart < gb.end && slotEnd > gb.start);
+                    });
+                }
+            }
 
             const googleJson = await googleRes.json().catch(() => null);
 
