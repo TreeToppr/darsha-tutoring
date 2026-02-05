@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
+import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 import { requireUserIdFromBearer, getGoogleAccessTokenForUser } from "../../google/_util";
 
 export const runtime = "nodejs";
