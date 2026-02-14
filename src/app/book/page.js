@@ -12,6 +12,7 @@ import TutorSubjectPicker from "./components/TutorSubjectPicker";
 import BookingCalendar from "./components/BookingCalendar";
 import SubjectChips from "./components/SubjectChips";
 import TutorCards from "./components/TutorCards";
+import BlockingLoader from "../components/BlockingLoader";
 
 function generateSlots(start, end) {
     const slots = [];
@@ -168,6 +169,19 @@ export default function BookPage() {
         if (["cancelled", "canceled", "deleted"].includes(s)) return "cancelled";
         return "other";
     };
+
+    const blocking =
+        checking ||
+        loadingWeek ||
+        pricingLoading ||
+        Boolean(requestingKey);
+
+    const blockingText =
+        checking ? "Loading..." :
+            requestingKey ? "Processing..." :
+                loadingWeek ? "Loading availability..." :
+                    pricingLoading ? "Calculating price..." :
+                        "Loading...";
 
     const onStartPoliPay = async () => {
         if (!paymentPopup?.bookingId) return;
@@ -415,21 +429,21 @@ export default function BookPage() {
                 }
             }
 
-            const googleJson = await googleRes.json().catch(() => null);
+            // const googleJson = await googleRes.json().catch(() => null);
 
-            if (googleRes.ok && googleJson?.ok && Array.isArray(googleJson.busy)) {
-                const googleBusy = googleJson.busy.map((b) => ({
-                    start: new Date(b.start).getTime(),
-                    end: new Date(b.end).getTime(),
-                }));
+            // if (googleRes.ok && googleJson?.ok && Array.isArray(googleJson.busy)) {
+            //     const googleBusy = googleJson.busy.map((b) => ({
+            //         start: new Date(b.start).getTime(),
+            //         end: new Date(b.end).getTime(),
+            //     }));
 
-                generated = generated.filter((slot) => {
-                    const slotStart = new Date(`${selectedDate}T${minutesToTime(slot.start)}:00`).getTime();
-                    const slotEnd = new Date(`${selectedDate}T${minutesToTime(slot.end)}:00`).getTime();
+            //     generated = generated.filter((slot) => {
+            //         const slotStart = new Date(`${selectedDate}T${minutesToTime(slot.start)}:00`).getTime();
+            //         const slotEnd = new Date(`${selectedDate}T${minutesToTime(slot.end)}:00`).getTime();
 
-                    return !googleBusy.some((gb) => slotStart < gb.end && slotEnd > gb.start);
-                });
-            }
+            //         return !googleBusy.some((gb) => slotStart < gb.end && slotEnd > gb.start);
+            //     });
+            // }
         } catch (e) {
             // If Google fails, do NOT break booking.
             console.error("Google freebusy failed:", e?.message || e);
@@ -719,7 +733,10 @@ export default function BookPage() {
             return;
         }
 
-        const { error: insErr } = await supabase.from("bookings").insert(bookingsToInsert);
+        const { data: insertedBookings, error: insErr } = await supabase
+            .from("bookings")
+            .insert(bookingsToInsert)
+            .select("id, session_date");
 
         if (insErr) {
             setMessage(insErr.message);
@@ -794,7 +811,13 @@ export default function BookPage() {
         const travel = lessonMode === "in_person" ? (priceQuote?.travel ?? 0) : 0;
         const total = lessonMode === "in_person" ? (priceQuote?.total ?? base) : base;
 
+        const firstBookingId =
+            (insertedBookings || []).find((r) => r.session_date === sessionDate)?.id
+            || (insertedBookings || [])[0]?.id
+            || null;
+
         setPaymentPopup({
+            bookingId: firstBookingId,
             studentName,
             sessionDate,
             paymentStatus: "unpaid",
@@ -938,6 +961,30 @@ export default function BookPage() {
                 is_recurring: false,
             },
         });
+
+        // Best effort: create Google Calendar event in tutor calendar + invite parent
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            if (token) {
+                const res = await fetch("/api/bookings/add-to-google", {
+                    method: "POST",
+                    headers: {
+                        "content-type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ bookingId: newBooking.id }),
+                });
+
+                const json = await res.json().catch(() => ({}));
+                if (!res.ok || !json?.ok) {
+                    console.error("Auto Google invite failed:", json?.error || res.status);
+                }
+            }
+        } catch (e) {
+            console.error("Auto Google invite crashed:", e?.message || e);
+        }
 
         // ---- EMAILS: booking requested (parent + tutor) ----
         const parentEmail = user?.email || "";
@@ -1128,7 +1175,8 @@ export default function BookPage() {
             short: d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" }),
         };
     });
-    const hours = Array.from({ length: 13 }).map((_, i) => 8 + i); // 8..20
+    const hours = Array.from({ length: 17 }).map((_, i) => 7 + i); // 7..23
+
     const times = (() => {
         const startMin = 8 * 60;
         const endMin = 20 * 60;
@@ -1166,434 +1214,475 @@ export default function BookPage() {
     };
 
     return (
-        <main style={{ maxWidth: 720, margin: "0 auto", padding: 32 }}>
+        // <main style={{ maxWidth: 720, margin: "0 auto", padding: 32 }}>
+        // <main className="appShell">
 
-            {/* Payment popup (after booking request) */}
-            <PaymentPopup
-                payment={paymentPopup}
-                creditBalance={creditBalance}
-                onPayWithCredit={async (bookingId) => {
-                    try {
-                        const { data, error } = await supabase.rpc("pay_booking_with_credit", {
-                            p_booking_id: bookingId,
-                        });
-                        if (error) throw new Error(error.message);
+            <>
+                <BlockingLoader show={blocking} text={blockingText} />
+                <main className="appShell">
 
-                        await logAudit({
-                            action: "payment.paid_with_credit",
-                            entityType: "booking",
-                            entityId: bookingId,
-                            metadata: {
-                                amount_spent: data?.amount_spent,
-                                ledger_id: data?.ledger_id,
-                            },
-                        });
+                    {/* Payment popup (after booking request) */}
+                    <PaymentPopup
+                        payment={paymentPopup}
+                        creditBalance={creditBalance}
+                        onPayWithCredit={async (bookingId) => {
+                            try {
+                                const { data, error } = await supabase.rpc("pay_booking_with_credit", {
+                                    p_booking_id: bookingId,
+                                });
+                                if (error) throw new Error(error.message);
 
-                        setMessage(`Paid with credit: $${Number(data?.amount_spent ?? 0).toFixed(2)} NZD`);
+                                await logAudit({
+                                    action: "payment.paid_with_credit",
+                                    entityType: "booking",
+                                    entityId: bookingId,
+                                    metadata: {
+                                        amount_spent: data?.amount_spent,
+                                        ledger_id: data?.ledger_id,
+                                    },
+                                });
 
-                        const { data: { user } } = await supabase.auth.getUser();
-                        if (user) {
-                            await Promise.all([
-                                loadCreditBalance(user.id),
-                                loadWeekBookings(weekDays, selectedTutorId),
-                            ]);
-                        }
+                                setMessage(`Paid with credit: $${Number(data?.amount_spent ?? 0).toFixed(2)} NZD`);
 
-                        setPaymentPopup(null);
-                    } catch (e) {
-                        setMessage(e?.message || "Could not pay with credit.");
-                    }
-                }}
-                formatISO={formatISO}
-                buildPaymentCopyText={buildPaymentCopyText}
-                onClose={() => setPaymentPopup(null)}
-                onDone={() => {
-                    // Close the popup and take the parent to their dashboard
-                    // so they can immediately see the booking they just created.
-                    setPaymentPopup(null);
-                    router.push("/parent/dashboard");
-                    // router.refresh();
+                                const { data: { user } } = await supabase.auth.getUser();
+                                if (user) {
+                                    await Promise.all([
+                                        loadCreditBalance(user.id),
+                                        loadWeekBookings(weekDays, selectedTutorId),
+                                    ]);
+                                }
 
-                }}
-                // onStartPoliPay={async (bookingId) => {
-                //     try {
-                //         setMessage("Redirecting to POLi...");
+                                setPaymentPopup(null);
+                            } catch (e) {
+                                setMessage(e?.message || "Could not pay with credit.");
+                            }
+                        }}
+                        formatISO={formatISO}
+                        buildPaymentCopyText={buildPaymentCopyText}
+                        onClose={() => setPaymentPopup(null)}
+                        onDone={() => {
+                            // Close the popup and take the parent to their dashboard
+                            // so they can immediately see the booking they just created.
+                            setPaymentPopup(null);
+                            router.push("/parent/dashboard");
+                            // router.refresh();
 
-                //         const { data: { session } } = await supabase.auth.getSession();
-                //         const accessToken = session?.access_token;
+                        }}
+                        // onStartPoliPay={async (bookingId) => {
+                        //     try {
+                        //         setMessage("Redirecting to POLi...");
 
-                //         if (!accessToken) {
-                //             alert("You are not logged in. Please sign in again.");
-                //             return;
-                //         }
+                        //         const { data: { session } } = await supabase.auth.getSession();
+                        //         const accessToken = session?.access_token;
 
-                //         const res = await fetch("/api/poli/create", {
-                //             method: "POST",
-                //             headers: {
-                //                 "Content-Type": "application/json",
-                //                 Authorization: `Bearer ${accessToken}`,
-                //             },
-                //             body: JSON.stringify({ bookingId }), // ✅ USE THE PARAM, not booking.id
-                //         });
+                        //         if (!accessToken) {
+                        //             alert("You are not logged in. Please sign in again.");
+                        //             return;
+                        //         }
 
-                //         const json = await res.json().catch(() => ({}));
+                        //         const res = await fetch("/api/poli/create", {
+                        //             method: "POST",
+                        //             headers: {
+                        //                 "Content-Type": "application/json",
+                        //                 Authorization: `Bearer ${accessToken}`,
+                        //             },
+                        //             body: JSON.stringify({ bookingId }), // ✅ USE THE PARAM, not booking.id
+                        //         });
 
-                //         if (!res.ok) {
-                //             throw new Error(json?.error || "POLi payment could not be started.");
-                //         }
+                        //         const json = await res.json().catch(() => ({}));
 
-                //         if (!json?.redirectUrl) {
-                //             throw new Error("POLi did not return a redirect URL.");
-                //         }
+                        //         if (!res.ok) {
+                        //             throw new Error(json?.error || "POLi payment could not be started.");
+                        //         }
 
-                //         window.location.assign(json.redirectUrl);
-                //     } catch (e) {
-                //         setMessage(e?.message || "POLi payment could not be started.");
-                //     }
-                // }}
+                        //         if (!json?.redirectUrl) {
+                        //             throw new Error("POLi did not return a redirect URL.");
+                        //         }
 
-                onStartPoliPay={async (bookingId) => {
-                    try {
-                        setMessage("Redirecting to POLi...");
+                        //         window.location.assign(json.redirectUrl);
+                        //     } catch (e) {
+                        //         setMessage(e?.message || "POLi payment could not be started.");
+                        //     }
+                        // }}
 
-                        // 1. Get the user's auth token
-                        const { data: { session } } = await supabase.auth.getSession();
-                        const accessToken = session?.access_token;
+                        onStartPoliPay={async (bookingId) => {
+                            try {
+                                setMessage("Redirecting to POLi...");
 
-                        if (!accessToken) {
-                            alert("You are not logged in. Please sign in again.");
-                            return;
-                        }
+                                // 1. Get the user's auth token
+                                const { data: { session } } = await supabase.auth.getSession();
+                                const accessToken = session?.access_token;
 
-                        // 2. Call your API
-                        const res = await fetch("/api/poli/create", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${accessToken}`,
-                            },
-                            body: JSON.stringify({ bookingId }),
-                        });
+                                if (!accessToken) {
+                                    alert("You are not logged in. Please sign in again.");
+                                    return;
+                                }
 
-                        const json = await res.json(); // Don't use .catch() here so we see the real error
+                                // 2. Call your API
+                                const res = await fetch("/api/poli/create", {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        Authorization: `Bearer ${accessToken}`,
+                                    },
+                                    body: JSON.stringify({ bookingId }),
+                                });
 
-                        if (!res.ok) {
-                            throw new Error(json?.error || "POLi payment could not be started.");
-                        }
+                                const json = await res.json(); // Don't use .catch() here so we see the real error
 
-                        // --- FIX IS HERE: Use 'navigateUrl' to match your backend ---
-                        if (json.navigateUrl) {
-                            window.location.href = json.navigateUrl;
-                        } else {
-                            console.error("POLi response missing URL:", json);
-                            throw new Error("POLi did not return a payment URL.");
-                        }
+                                if (!res.ok) {
+                                    throw new Error(json?.error || "POLi payment could not be started.");
+                                }
 
-                    } catch (e) {
-                        console.error(e);
-                        setMessage(e?.message || "POLi payment could not be started.");
-                    }
-                }}
-                onCopied={() => setMessage("Payment details copied.")}
-                onCopyFailed={() => setMessage("Could not copy. Please copy manually.")}
-            />
+                                // --- FIX IS HERE: Use 'navigateUrl' to match your backend ---
+                                if (json.navigateUrl) {
+                                    window.location.href = json.navigateUrl;
+                                } else {
+                                    console.error("POLi response missing URL:", json);
+                                    throw new Error("POLi did not return a payment URL.");
+                                }
+
+                            } catch (e) {
+                                console.error(e);
+                                setMessage(e?.message || "POLi payment could not be started.");
+                            }
+                        }}
+                        onCopied={() => setMessage("Payment details copied.")}
+                        onCopyFailed={() => setMessage("Could not copy. Please copy manually.")}
+                    />
 
 
-            {/* Booking Wizard */}
-            <div style={{ maxWidth: 980, margin: "0 auto", padding: "18px 14px" }}>
-                <h1 style={{ margin: 0, fontSize: 26, fontWeight: 950 }}>Book a lesson</h1>
-                <div style={{ marginTop: 6, color: "#555", fontWeight: 650 }}>
-                    Follow the steps below. You’ll see the calendar only after choosing a tutor.
-                </div>
-
-                {students.length === 0 ? (
-                    <div style={{ marginTop: 16, padding: 14, border: "1px solid #eee", borderRadius: 16, background: "#fff" }}>
-                        <div style={{ fontWeight: 900 }}>Add a student first</div>
+                    {/* Booking Wizard */}
+                    <div style={{ maxWidth: 980, margin: "0 auto", padding: "18px 14px" }}>
+                        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 950 }}>Book a lesson</h1>
                         <div style={{ marginTop: 6, color: "#555", fontWeight: 650 }}>
-                            Bookings are made per student, so you’ll need to add at least one.
+                            Follow the steps below. You’ll see the calendar only after choosing a tutor.
                         </div>
-                        <a
-                            href="/parent/students"
-                            style={{ display: "inline-block", marginTop: 10, fontWeight: 900, color: "#1f7aea", textDecoration: "none" }}
-                        >
-                            + Add a student
-                        </a>
-                    </div>
-                ) : (
-                    <div style={{ marginTop: 16, padding: 14, border: "1px solid #eee", borderRadius: 16, background: "#fff" }}>
-                        {/* Step 1 */}
-                        {!selectedStudentId ? (
-                            <>
-                                <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
-                                    Who are you booking for?
+
+                        {students.length === 0 ? (
+                            <div style={{ marginTop: 16, padding: 14, border: "1px solid #eee", borderRadius: 16, background: "#fff" }}>
+                                <div style={{ fontWeight: 900 }}>Add a student first</div>
+                                <div style={{ marginTop: 6, color: "#555", fontWeight: 650 }}>
+                                    Bookings are made per student, so you’ll need to add at least one.
                                 </div>
-
-                                <StudentChips
-                                    students={students}
-                                    selectedStudentId={selectedStudentId}
-                                    onSelectStudent={handleSelectStudent}
-                                    addStudentHref="/parent/students"
-                                    showYearLevel={true}
-                                />
-                            </>
-                        ) : null}
-
-                        {/* Step 2 */}
-                        {selectedStudentId && !selectedSubjectId ? (
-                            <>
-                                <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
-                                    What subject?
-                                </div>
-
-                                <SubjectChips
-                                    subjects={subjects}
-                                    selectedSubjectId={selectedSubjectId}
-                                    onSelectSubject={handleSelectSubject}
-                                />
-
-                                <div style={{ marginTop: 12 }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            handleSelectStudent("");
-                                            setPendingSlot(null);
-                                        }}
-                                        style={{
-                                            border: "1px solid #ddd",
-                                            background: "#fff",
-                                            borderRadius: 10,
-                                            padding: "8px 10px",
-                                            fontWeight: 900,
-                                            cursor: "pointer",
-                                        }}
-                                    >
-                                        Back
-                                    </button>
-                                </div>
-                            </>
-                        ) : null}
-
-                        {/* Step 3 */}
-                        {selectedStudentId && selectedSubjectId && !selectedTutorId ? (
-                            <>
-                                <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
-                                    Choose a tutor for this subject
-                                </div>
-
-                                <TutorCards
-                                    tutorsToShow={getTutorsForSubject(selectedSubjectId)}
-                                    selectedTutorId={selectedTutorId}
-                                    onSelectTutor={handleSelectTutor}
-                                />
-
-                                <div style={{ marginTop: 12 }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedSubjectId("");
-                                            setPendingSlot(null);
-                                        }}
-                                        style={{
-                                            border: "1px solid #ddd",
-                                            background: "#fff",
-                                            borderRadius: 10,
-                                            padding: "8px 10px",
-                                            fontWeight: 900,
-                                            cursor: "pointer",
-                                        }}
-                                    >
-                                        Back
-                                    </button>
-                                </div>
-                            </>
-                        ) : null}
-
-                        {/* Step 4 */}
-                        {selectedStudentId && selectedSubjectId && selectedTutorId ? (
-                            <>
-                                <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
-                                    Pick a time from the {getSelectedTutor()?.display_name || "Selected"}’s calendar
-                                </div>
-
-                                <div style={{ marginBottom: 10, color: "#555", fontWeight: 650 }}>
-                                    Student: <b>{getSelectedStudent()?.full_name || "Selected"}</b>
-                                    {/* <b> | </b>
-                                    Tutor: <b>{getSelectedTutor()?.display_name || "Selected"}</b> */}
-                                </div>
-
-                                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedTutorId("");
-                                            setPendingSlot(null);
-                                        }}
-                                        style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
-                                    >
-                                        Change tutor
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedSubjectId("");
-                                            setPendingSlot(null);
-                                        }}
-
-                                        style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
-                                    >
-                                        Change subject
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            handleSelectStudent("");
-                                            setPendingSlot(null);
-                                        }}
-                                        style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
-                                    >
-                                        Change student
-                                    </button>
-                                </div>
-
-                                <LessonModeToggle
-                                    lessonMode={lessonMode}
-                                    onChangeMode={setLessonMode}
-                                    bookingAddress={bookingAddress}
-                                    onAddressChange={(addr) => {
-                                        setBookingAddress(addr);
-                                        // Reset the quote when address changes so you don't show stale prices
-                                        setPriceQuote(null);
-                                        setDriveMinutes(null);
-                                        setPricingError("");
-                                    }}
-                                    pricingLoading={pricingLoading}
-                                    pricingError={pricingError}
-                                    priceQuote={priceQuote}
-                                    driveMinutes={driveMinutes}
-                                    onCalculatePrice={calculateTravelCost}
-                                />
-
-                                {pendingSlot ? (
-                                    <div
-                                        style={{
-                                            position: "sticky",
-                                            bottom: 0,
-                                            marginTop: 14,
-                                            padding: 12,
-                                            border: "1px solid #e6e6e6",
-                                            borderRadius: 14,
-                                            background: "#fff",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            gap: 12,
-                                        }}
-                                    >
-                                        <div style={{ fontWeight: 900 }}>
-                                            Selected:{" "}
-                                            {formatISO(pendingSlot.date)}{" "}<br></br>
-                                            {minutesToTime(pendingSlot.start)} - {minutesToTime(pendingSlot.end)}
+                                <a
+                                    href="/parent/students"
+                                    style={{ display: "inline-block", marginTop: 10, fontWeight: 900, color: "#1f7aea", textDecoration: "none" }}
+                                >
+                                    + Add a student
+                                </a>
+                            </div>
+                        ) : (
+                            <div style={{ marginTop: 16, padding: 14, border: "1px solid #eee", borderRadius: 16, background: "#fff" }}>
+                                {/* Step 1 */}
+                                {!selectedStudentId ? (
+                                    <>
+                                        <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
+                                            Who are you booking for?
                                         </div>
 
-                                        <div style={{ display: "flex", gap: 10 }}>
+                                        <StudentChips
+                                            students={students}
+                                            selectedStudentId={selectedStudentId}
+                                            onSelectStudent={handleSelectStudent}
+                                            addStudentHref="/parent/students"
+                                            showYearLevel={true}
+                                        />
+                                    </>
+                                ) : null}
+
+                                {/* Step 2 */}
+                                {selectedStudentId && !selectedSubjectId ? (
+                                    <>
+                                        <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
+                                            What subject?
+                                        </div>
+
+                                        <SubjectChips
+                                            subjects={subjects}
+                                            selectedSubjectId={selectedSubjectId}
+                                            onSelectSubject={handleSelectSubject}
+                                        />
+
+                                        <div style={{ marginTop: 12 }}>
                                             <button
                                                 type="button"
-                                                onClick={() => setPendingSlot(null)}
+                                                onClick={() => {
+                                                    handleSelectStudent("");
+                                                    setPendingSlot(null);
+                                                }}
                                                 style={{
                                                     border: "1px solid #ddd",
                                                     background: "#fff",
                                                     borderRadius: 10,
-                                                    padding: "10px 12px",
+                                                    padding: "8px 10px",
                                                     fontWeight: 900,
                                                     cursor: "pointer",
                                                 }}
                                             >
-                                                Clear
+                                                Back
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : null}
+
+                                {/* Step 3 */}
+                                {selectedStudentId && selectedSubjectId && !selectedTutorId ? (
+                                    <>
+                                        <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
+                                            Choose a tutor for this subject
+                                        </div>
+
+                                        <TutorCards
+                                            tutorsToShow={getTutorsForSubject(selectedSubjectId)}
+                                            selectedTutorId={selectedTutorId}
+                                            onSelectTutor={handleSelectTutor}
+                                        />
+
+                                        <div style={{ marginTop: 12 }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedSubjectId("");
+                                                    setPendingSlot(null);
+                                                }}
+                                                style={{
+                                                    border: "1px solid #ddd",
+                                                    background: "#fff",
+                                                    borderRadius: 10,
+                                                    padding: "8px 10px",
+                                                    fontWeight: 900,
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Back
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : null}
+
+                                {/* Step 4 */}
+                                {selectedStudentId && selectedSubjectId && selectedTutorId ? (
+                                    <>
+                                        <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 10 }}>
+                                            Pick a time from the {getSelectedTutor()?.display_name || "Selected"}’s calendar
+                                        </div>
+
+                                        <div style={{ marginBottom: 10, color: "#555", fontWeight: 650 }}>
+                                            Student: <b>{getSelectedStudent()?.full_name || "Selected"}</b>
+                                            {/* <b> | </b>
+                                    Tutor: <b>{getSelectedTutor()?.display_name || "Selected"}</b> */}
+                                        </div>
+
+                                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedTutorId("");
+                                                    setPendingSlot(null);
+                                                }}
+                                                style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
+                                            >
+                                                Change tutor
                                             </button>
 
                                             <button
                                                 type="button"
-                                                onClick={async () => {
-                                                    if (!selectedStudentId) {
-                                                        setMessage("Please select a student first.");
-                                                        return;
-                                                    }
-
-                                                    if (lessonMode === "in_person" && !priceQuote) {
-                                                        setMessage("Please calculate the price before confirming an in-person booking.");
-                                                        return;
-                                                    }
-
-                                                    const slot = { start: pendingSlot.start, end: pendingSlot.end };
-
-                                                    // If you later re-enable recurring, switch this based on isRecurring.
-                                                    await handleRequestBooking(pendingSlot.date, slot);
-
-                                                    // Clear selection after requesting
+                                                onClick={() => {
+                                                    setSelectedSubjectId("");
                                                     setPendingSlot(null);
                                                 }}
-                                                style={{
-                                                    border: "0",
-                                                    background: "#1f7aea",
-                                                    color: "#fff",
-                                                    borderRadius: 10,
-                                                    padding: "10px 14px",
-                                                    fontWeight: 950,
-                                                    cursor: "pointer",
-                                                }}
+
+                                                style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
                                             >
-                                                Click to confirm booking
+                                                Change subject
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    handleSelectStudent("");
+                                                    setPendingSlot(null);
+                                                }}
+                                                style={{ border: "1px solid #ddd", background: "#fff", borderRadius: 10, padding: "8px 10px", fontWeight: 900, cursor: "pointer" }}
+                                            >
+                                                Change student
                                             </button>
                                         </div>
-                                    </div>
+
+                                        <LessonModeToggle
+                                            lessonMode={lessonMode}
+                                            onChangeMode={setLessonMode}
+                                            bookingAddress={bookingAddress}
+                                            onAddressChange={(addr) => {
+                                                setBookingAddress(addr);
+                                                // Reset the quote when address changes so you don't show stale prices
+                                                setPriceQuote(null);
+                                                setDriveMinutes(null);
+                                                setPricingError("");
+                                            }}
+                                            pricingLoading={pricingLoading}
+                                            pricingError={pricingError}
+                                            priceQuote={priceQuote}
+                                            driveMinutes={driveMinutes}
+                                            onCalculatePrice={calculateTravelCost}
+                                        />
+
+                                        {/* Recurring toggle (term-based) */}
+                                        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                                            <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 850 }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isRecurring}
+                                                    onChange={(e) => setIsRecurring(e.target.checked)}
+                                                />
+                                                Recurring weekly (for a term)
+                                            </label>
+
+                                            {isRecurring ? (
+                                                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                                                    <div style={{ fontWeight: 800, color: "#444" }}>Term:</div>
+                                                    <select
+                                                        value={selectedTermId}
+                                                        onChange={(e) => setSelectedTermId(e.target.value)}
+                                                        style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", fontWeight: 800 }}
+                                                    >
+                                                        {(terms || []).map((t) => (
+                                                            <option key={t.id} value={t.id}>
+                                                                {t.name} ({t.start_date} to {t.end_date})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            ) : null}
+                                        </div>
+
+                                        {pendingSlot ? (
+                                            <div
+                                                style={{
+                                                    position: "sticky",
+                                                    bottom: 0,
+                                                    marginTop: 14,
+                                                    padding: 12,
+                                                    border: "1px solid #e6e6e6",
+                                                    borderRadius: 14,
+                                                    background: "#fff",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "space-between",
+                                                    gap: 12,
+                                                }}
+                                            >
+                                                <div style={{ fontWeight: 900 }}>
+                                                    Selected:{" "}
+                                                    {formatISO(pendingSlot.date)}{" "}<br></br>
+                                                    {minutesToTime(pendingSlot.start)} - {minutesToTime(pendingSlot.end)}
+                                                </div>
+
+                                                <div style={{ display: "flex", gap: 10 }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPendingSlot(null)}
+                                                        style={{
+                                                            border: "1px solid #ddd",
+                                                            background: "#fff",
+                                                            borderRadius: 10,
+                                                            padding: "10px 12px",
+                                                            fontWeight: 900,
+                                                            cursor: "pointer",
+                                                        }}
+                                                    >
+                                                        Clear
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={async () => {
+                                                            if (!selectedStudentId) {
+                                                                setMessage("Please select a student first.");
+                                                                return;
+                                                            }
+
+                                                            if (lessonMode === "in_person" && !priceQuote) {
+                                                                setMessage("Please calculate the price before confirming an in-person booking.");
+                                                                return;
+                                                            }
+
+                                                            const slot = { start: pendingSlot.start, end: pendingSlot.end };
+
+                                                            if (isRecurring) {
+                                                                await handleRequestRecurring(pendingSlot.date, slot);
+                                                            } else {
+                                                                await handleRequestBooking(pendingSlot.date, slot);
+                                                            }
+
+                                                            // Clear selection after requesting
+                                                            setPendingSlot(null);
+                                                        }}
+                                                        style={{
+                                                            border: "0",
+                                                            background: "#1f7aea",
+                                                            color: "#fff",
+                                                            borderRadius: 10,
+                                                            padding: "10px 14px",
+                                                            fontWeight: 950,
+                                                            cursor: "pointer",
+                                                            disabled: {blocking},
+                                                        }}
+                                                    >
+                                                        Click to confirm booking
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : null}
+
+                                        {/* Week navigation stays, but only inside step 4 */}
+                                        <div style={{ margin: "12px 0", display: "flex", alignItems: "center", gap: 12 }}>
+                                            <button
+                                                onClick={() => setMonthOffset((prev) => Math.max(minWeekOffset, prev - 1))}
+                                                disabled={monthOffset <= minWeekOffset}
+                                            >
+                                                ◀
+                                            </button>
+
+                                            <div style={{ fontWeight: 850 }}>
+                                                Week of {formatISO(weekDays[0].iso)} to {formatISO(weekDays[6].iso)}
+                                            </div>
+
+                                            <button
+                                                onClick={() => setMonthOffset((prev) => Math.min(minWeekOffset + 3, prev + 1))}
+                                                disabled={monthOffset >= minWeekOffset + 3}
+                                            >
+                                                ▶
+                                            </button>
+                                        </div>
+
+                                        <BookingCalendar
+                                            weekDays={weekDays}
+                                            hours={hours}
+                                            slotsByDate={slotsByDate}
+                                            bookingsByDate={bookingsByDate}
+                                            otherBookingsByDate={otherBookingsByDate}
+                                            loadingWeek={loadingWeek}
+                                            selectedStudentId={selectedStudentId}
+                                            formatISO={formatISO}
+                                            minutesToTime={minutesToTime}
+                                            timeToMinutes={timeToMinutes}
+                                            statusToBucket={statusToBucket}
+                                            onCellClick={handleCellClick}
+                                            onHoverRange={setHoveredRange}
+                                            selectedSlot={pendingSlot}
+                                        />
+
+                                    </>
                                 ) : null}
+                            </div>
+                        )}
 
-                                {/* Week navigation stays, but only inside step 4 */}
-                                <div style={{ margin: "12px 0", display: "flex", alignItems: "center", gap: 12 }}>
-                                    <button
-                                        onClick={() => setMonthOffset((prev) => Math.max(minWeekOffset, prev - 1))}
-                                        disabled={monthOffset <= minWeekOffset}
-                                    >
-                                        ◀
-                                    </button>
-
-                                    <div style={{ fontWeight: 850 }}>
-                                        Week of {formatISO(weekDays[0].iso)} to {formatISO(weekDays[6].iso)}
-                                    </div>
-
-                                    <button
-                                        onClick={() => setMonthOffset((prev) => Math.min(minWeekOffset + 3, prev + 1))}
-                                        disabled={monthOffset >= minWeekOffset + 3}
-                                    >
-                                        ▶
-                                    </button>
-                                </div>
-
-                                <BookingCalendar
-                                    weekDays={weekDays}
-                                    hours={hours}
-                                    slotsByDate={slotsByDate}
-                                    bookingsByDate={bookingsByDate}
-                                    otherBookingsByDate={otherBookingsByDate}
-                                    loadingWeek={loadingWeek}
-                                    selectedStudentId={selectedStudentId}
-                                    formatISO={formatISO}
-                                    minutesToTime={minutesToTime}
-                                    timeToMinutes={timeToMinutes}
-                                    statusToBucket={statusToBucket}
-                                    onCellClick={handleCellClick}
-                                    onHoverRange={setHoveredRange}
-                                />
-
-                            </>
-                        ) : null}
+                        {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
                     </div>
-                )}
-
-                {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
-            </div>
-        </main>
+                </main>
+            </>
+        // </main>
     );
 }

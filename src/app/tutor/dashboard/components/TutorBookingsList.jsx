@@ -88,6 +88,7 @@ export default function TutorBookingsList({
     onMarkPaid,
     onMarkPaidSeries,
     onCancel,
+    onAddToGoogle,
 }) {
 
     const rows = Array.isArray(bookings) ? bookings : [];
@@ -127,6 +128,10 @@ export default function TutorBookingsList({
                     const canDecide = String(b?.status || "").toLowerCase() === "requested";
                     const canMarkPaid = (b?.payment_status || "unpaid") !== "paid";
                     const canCancel = String(b?.status || "").toLowerCase() === "accepted";
+                    const hasGoogleEvent = !!b?.google_event_id;
+                    const canAddToGoogle =
+                        !hasGoogleEvent &&
+                        !["rejected", "declined", "cancelled"].includes(String(b?.status || "").toLowerCase());
 
                     return (
                         <div
@@ -194,7 +199,7 @@ export default function TutorBookingsList({
                                         <button
                                             type="button"
                                             style={actionBtnStyle("primary")}
-                                            disabled={updatingKey === `booking-${b.id}-accepted` || updatingKey === `group-${b.recurring_group_id}-accepted`}
+                                            disabled={blocking || updatingKey === `booking-${b.id}-accepted` || updatingKey === `group-${b.recurring_group_id}-accepted`}
                                             onClick={() => onAccept?.(b)}
                                         >
                                             {updatingKey === `booking-${b.id}-accepted` ? "Accepting…" : "Accept"}
@@ -203,7 +208,7 @@ export default function TutorBookingsList({
                                         <button
                                             type="button"
                                             style={actionBtnStyle("danger")}
-                                            disabled={updatingKey === `booking-${b.id}-rejected` || updatingKey === `group-${b.recurring_group_id}-rejected`}
+                                            disabled={blocking || updatingKey === `booking-${b.id}-rejected` || updatingKey === `group-${b.recurring_group_id}-rejected`}
                                             onClick={() => onReject?.(b)}
                                         >
                                             {updatingKey === `booking-${b.id}-rejected` ? "Rejecting…" : "Reject"}
@@ -215,7 +220,7 @@ export default function TutorBookingsList({
                                                 <button
                                                     type="button"
                                                     style={actionBtnStyle()}
-                                                    disabled={updatingKey === `group-${b.recurring_group_id}-accepted`}
+                                                    disabled={blocking || updatingKey === `group-${b.recurring_group_id}-accepted`}
                                                     onClick={() => onAcceptSeries?.(b)}
                                                 >
                                                     {updatingKey === `group-${b.recurring_group_id}-accepted` ? "Accepting series…" : "Accept series"}
@@ -224,7 +229,7 @@ export default function TutorBookingsList({
                                                 <button
                                                     type="button"
                                                     style={actionBtnStyle("danger")}
-                                                    disabled={updatingKey === `group-${b.recurring_group_id}-rejected`}
+                                                    disabled={blocking || updatingKey === `group-${b.recurring_group_id}-rejected`}
                                                     onClick={() => onRejectSeries?.(b)}
                                                 >
                                                     {updatingKey === `group-${b.recurring_group_id}-rejected` ? "Rejecting series…" : "Reject series"}
@@ -244,17 +249,28 @@ export default function TutorBookingsList({
                                         <button
                                             type="button"
                                             style={actionBtnStyle()}
-                                            disabled={updatingKey === `paid-${b.id}` || updatingKey === `paid-group-${b.recurring_group_id}`}
+                                            disabled={blocking || updatingKey === `paid-${b.id}` || updatingKey === `paid-group-${b.recurring_group_id}`}
                                             onClick={() => onMarkPaid?.(b)}
                                         >
                                             {updatingKey === `paid-${b.id}` ? "Updating…" : "Mark paid"}
                                         </button>
 
+                                        {canAddToGoogle ? (
+                                            <button
+                                                type="button"
+                                                style={actionBtnStyle()}
+                                                disabled={blocking || updatingKey === `google-${b.id}`}
+                                                onClick={() => onAddToGoogle?.(b)}
+                                            >
+                                                {updatingKey === `google-${b.id}` ? "Adding…" : "Add to Google Calendar"}
+                                            </button>
+                                        ) : null}
+
                                         {isRecurring ? (
                                             <button
                                                 type="button"
                                                 style={actionBtnStyle()}
-                                                disabled={updatingKey === `paid-group-${b.recurring_group_id}`}
+                                                disabled={blocking || updatingKey === `paid-group-${b.recurring_group_id}`}
                                                 onClick={() => onMarkPaidSeries?.(b)}
                                             >
                                                 {updatingKey === `paid-group-${b.recurring_group_id}` ? "Updating series…" : "Mark series paid"}
@@ -267,7 +283,7 @@ export default function TutorBookingsList({
                                     <button
                                         type="button"
                                         style={actionBtnStyle("danger")}
-                                        disabled={updatingKey === `cancel-${b.id}`}
+                                        disabled={blocking || updatingKey === `cancel-${b.id}`}
                                         onClick={() => onCancel?.(b)}
                                     >
                                         {updatingKey === `cancel-${b.id}` ? "Cancelling…" : "Cancel"}

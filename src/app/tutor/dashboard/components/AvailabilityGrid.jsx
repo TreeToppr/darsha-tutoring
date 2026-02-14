@@ -114,7 +114,7 @@ export default function TutorAvailabilityPage() {
         });
     }, [weekStart]);
 
-    const hours = useMemo(() => Array.from({ length: 13 }).map((_, i) => 8 + i), []); // 08:00 - 20:00
+    const hours = useMemo(() => Array.from({ length: 17 }).map((_, i) => 7 + i), []); // 07:00 - 23:00
 
     const loadOverridesForWeek = async (tutorId, weekDays) => {
         const startIso = weekDays[0].iso;

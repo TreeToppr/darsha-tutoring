@@ -236,7 +236,7 @@ export default function BookingsList({ bookings, selectedBookingId, onCancel, on
                                                 cursor: "pointer",
                                                 whiteSpace: "nowrap",
                                             }}
-                                            title="Pay all unpaid lessons for this tutor"
+                                            title="Pay this lesson"
                                         >
                                             Pay (POLi)
                                         </button>

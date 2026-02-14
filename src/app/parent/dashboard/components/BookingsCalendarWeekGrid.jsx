@@ -21,8 +21,8 @@ function minutesToTime(m) {
 export default function BookingsCalendarWeekGrid({
     weekDays,
     bookings,
-    dayStart = "08:00",
-    dayEnd = "20:00",
+    dayStart = "07:00",
+    dayEnd = "23:00",
     onBookingClick,
     onEmptySlotClick,
     getBlockTitle,
@@ -58,7 +58,7 @@ export default function BookingsCalendarWeekGrid({
                     {weekDays.map((d) => (
                         <div key={d.iso} className="dayHead">
                             {d.label}
-                            <div className="dayIso">{d.iso}</div>
+                            {/* <div className="dayIso">{d.iso}</div> */}
                         </div>
                     ))}
                 </div>
@@ -305,6 +305,8 @@ export default function BookingsCalendarWeekGrid({
                 .dayHead {
                     padding: 10px;
                     font-weight: 900;
+                    white-space: nowrap;
+                    font-size: 14px;
                 }
 
                 .dayIso {

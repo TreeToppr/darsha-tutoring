@@ -9,74 +9,69 @@ function jsonError(message, status = 400) {
     return NextResponse.json({ ok: false, error: message }, { status });
 }
 
+async function getUserEmail(userId) {
+    try {
+        const res = await supabaseAdmin.auth.admin.getUserById(userId);
+        return res?.data?.user?.email || null;
+    } catch {
+        return null;
+    }
+}
+
 export async function POST(req) {
     try {
-        const userId = await requireUserIdFromBearer(req);
+        const tutorUserId = await requireUserIdFromBearer(req);
         const { bookingId } = await req.json();
 
         if (!bookingId) return jsonError("Missing bookingId", 400);
 
-        // Confirm tutor owns this booking
+        // Tutor row
         const { data: tutorRow, error: tutorErr } = await supabaseAdmin
             .from("tutors")
             .select("id")
-            .eq("profile_id", userId)
+            .eq("profile_id", tutorUserId)
             .single();
 
         if (tutorErr || !tutorRow?.id) return jsonError("Tutor not found", 403);
 
+        // Booking must belong to tutor
         const { data: booking, error: bErr } = await supabaseAdmin
             .from("bookings")
-            .select("id, tutor_id, parent_id, session_date, start_time, end_time, lesson_mode, booking_address_text, google_event_id")
+            .select("id, tutor_id, parent_id, session_date, start_time, end_time, lesson_mode, booking_address_text, status, google_event_id")
             .eq("id", bookingId)
             .single();
 
         if (bErr || !booking) return jsonError("Booking not found", 404);
         if (booking.tutor_id !== tutorRow.id) return jsonError("Not your booking", 403);
 
-        // Update status
-        const { error: upErr } = await supabaseAdmin
-            .from("bookings")
-            .update({ status: "accepted" })
-            .eq("id", bookingId);
-
-        if (upErr) return jsonError(upErr.message, 500);
-
-        // Parent email (best effort)
-        let parentEmail = null;
-        try {
-            const userRes = await supabaseAdmin.auth.admin.getUserById(booking.parent_id);
-            parentEmail = userRes?.data?.user?.email || null;
-        } catch {
-            parentEmail = null;
+        const status = String(booking.status || "").toLowerCase();
+        if (["rejected", "declined", "cancelled"].includes(status)) {
+            return jsonError("This booking cannot be added to calendar", 400);
         }
 
         if (booking.google_event_id) {
-            return NextResponse.json({ ok: true, skippedCalendar: true });
+            return NextResponse.json({ ok: true, already: true, google_event_id: booking.google_event_id });
         }
 
-        // Create Google event (invite parent)
-        const accessToken = await getGoogleAccessTokenForUser(userId);
+        const accessToken = await getGoogleAccessTokenForUser(tutorUserId);
+        const parentEmail = await getUserEmail(booking.parent_id);
 
         const startLocal = `${booking.session_date}T${String(booking.start_time).slice(0, 5)}:00`;
         const endLocal = `${booking.session_date}T${String(booking.end_time).slice(0, 5)}:00`;
 
-        const summary = "Tutoring lesson (DarshaTutor)";
-        const location =
-            booking.lesson_mode === "in_person" ? (booking.booking_address_text || "") : "Online";
+        const location = booking.lesson_mode === "in_person" ? (booking.booking_address_text || "") : "Online";
 
         const event = {
-            summary,
+            summary: "Tutoring lesson (DarshaTutor)",
             location,
+            description: "Created by DarshaTutor booking.",
             start: { dateTime: startLocal, timeZone: "Pacific/Auckland" },
             end: { dateTime: endLocal, timeZone: "Pacific/Auckland" },
             transparency: "opaque",
             attendees: parentEmail ? [{ email: parentEmail }] : [],
         };
 
-        const url =
-            `https://www.googleapis.com/calendar/v3/calendars/primary/events` +
-            `?sendUpdates=all`;
+        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all`;
 
         const googleRes = await fetch(url, {
             method: "POST",
@@ -93,11 +88,10 @@ export async function POST(req) {
 
         if (!googleRes.ok) {
             const msg = json?.error?.message || text || `Google invite failed (${googleRes.status})`;
-            return jsonError(`Booking accepted, but calendar invite failed: ${msg}`, 400);
+            return jsonError(msg, 400);
         }
 
-        // Save event id/link so UI knows it's in Google
-        const { error: calSaveErr } = await supabaseAdmin
+        const { error: uErr } = await supabaseAdmin
             .from("bookings")
             .update({
                 google_event_id: json?.id || null,
@@ -105,11 +99,9 @@ export async function POST(req) {
             })
             .eq("id", bookingId);
 
-        if (calSaveErr) {
-            return jsonError(`Booking accepted and calendar created, but failed to store google_event_id: ${calSaveErr.message}`, 500);
-        }
+        if (uErr) return jsonError(`Calendar created, but failed to store event id: ${uErr.message}`, 500);
 
-        return NextResponse.json({ ok: true, google_event_id: json?.id || null, google_event_link: json?.htmlLink || null, parentEmail });
+        return NextResponse.json({ ok: true, google_event_id: json?.id || null, google_event_link: json?.htmlLink || null });
     } catch (e) {
         return jsonError(e?.message || "Failed", 500);
     }

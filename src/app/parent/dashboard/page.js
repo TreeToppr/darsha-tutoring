@@ -14,6 +14,7 @@ import QuickStats from "./components/QuickStats";
 import ParentHeroCard from "./components/ParentHeroCard";
 // import BookingsCalendarWeekGrid from "./components/BookingsCalendarWeekGrid";
 import BookingsList from "./components/BookingsList";
+import BlockingLoader from "../../components/BlockingLoader";
 
 import Link from "next/link";
 
@@ -258,6 +259,42 @@ export default function ParentDashboard() {
     const [googleCalendars, setGoogleCalendars] = useState([]);
     const [googleSelected, setGoogleSelected] = useState(null);
     const [googleConnected, setGoogleConnected] = useState(false);
+
+    const blocking = checking || Boolean(updatingId);
+    const blockingText =
+        checking ? "Loading..." :
+            updatingId ? "Updating..." :
+                "Loading...";
+
+    const startPoliPayForBooking = async (bookingId) => {
+        try {
+            setMessage("");
+            if (!bookingId) throw new Error("Missing bookingId");
+
+            const { data: { session } } = await supabase.auth.getSession();
+            const accessToken = session?.access_token;
+            if (!accessToken) throw new Error("Not signed in");
+
+            const res = await fetch("/api/poli/create", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ bookingId }),
+            });
+
+            const json = await res.json().catch(() => ({}));
+
+            if (!res.ok || !json?.navigateUrl) {
+                throw new Error(json?.error || "POLi payment could not be started.");
+            }
+
+            window.location.href = json.navigateUrl;
+        } catch (e) {
+            setMessage(e?.message || "POLi payment could not be started.");
+        }
+    };
 
     const startPoliPayForTutorOwed = async (tutorId) => {
         try {
@@ -857,8 +894,11 @@ export default function ParentDashboard() {
 
 
     return (
-        <div style={{ padding: 24, background: "#fafafa", minHeight: "100vh" }}>
-            <style>{`
+        <>
+            <BlockingLoader show={blocking} text={blockingText} />
+            <div className="appShell">
+                <div style={{ padding: 24, background: "#fafafa", minHeight: "100vh" }}>
+                    <style>{`
                 .pageWrap { max-width: 980px; margin: 0 auto; }
 
                 /* Hide mobile bar by default (desktop/tablet) */
@@ -918,22 +958,22 @@ export default function ParentDashboard() {
                     }
             `}</style>
 
-            <div className="pageWrap">
-                {/* everything else stays inside here */}
+                    <div className="pageWrap">
+                        {/* everything else stays inside here */}
 
-                <ParentTopBar
-                    firstName={profile?.full_name ? profile.full_name.split(" ")[0] : "back"}
-                />
+                        <ParentTopBar
+                            firstName={profile?.full_name ? profile.full_name.split(" ")[0] : "back"}
+                        />
 
 
-                <QuickStats
-                    studentsCount={students.length}
-                    upcomingCount={upcomingBookings.length}
-                    requestedCount={requestedUpcoming.length}
-                    unpaidCount={unpaidUpcoming.length}
-                />
+                        <QuickStats
+                            studentsCount={students.length}
+                            upcomingCount={upcomingBookings.length}
+                            requestedCount={requestedUpcoming.length}
+                            unpaidCount={unpaidUpcoming.length}
+                        />
 
-                {/* <Link
+                        {/* <Link
                     href="/parent/profile"
                     style={{
                         marginTop: 16,
@@ -985,10 +1025,10 @@ export default function ParentDashboard() {
                     </div>
                 </Link> */}
 
-                <ParentHeroCard profile={profile} students={students} />
+                        <ParentHeroCard profile={profile} students={students} />
 
-                {/* Mobile-only switch (desktop shows both sections) */}
-                {/* <div className="mobileSwitch">
+                        {/* Mobile-only switch (desktop shows both sections) */}
+                        {/* <div className="mobileSwitch">
                     <button
                         type="button"
                         onClick={() => setView("profile")}
@@ -1024,9 +1064,9 @@ export default function ParentDashboard() {
                     </button>
                 </div> */}
 
-                {/* Desktop: 2-column dashboard. Mobile: show one at a time. */}
-                <div className="dashGrid">
-                    {/* <div style={{ display: view === "calendar" ? "none" : "block" }}>
+                        {/* Desktop: 2-column dashboard. Mobile: show one at a time. */}
+                        <div className="dashGrid">
+                            {/* <div style={{ display: view === "calendar" ? "none" : "block" }}>
                         <ProfilePanel
                             profile={profile}
                             students={students}
@@ -1036,32 +1076,32 @@ export default function ParentDashboard() {
                         />
                     </div> */}
 
-                    {/* <div style={{ display: view === "profile" ? "none" : "block" }}>
+                            {/* <div style={{ display: view === "profile" ? "none" : "block" }}>
                         <BookingsCalendarWeek bookings={bookings} students={students} />
                     </div> */}
 
-                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        {!googleConnected ? (
-                            <button type="button" onClick={startGoogleConnect} style={toggleBtnStyle(false)}>
-                                Connect Google Calendar
-                            </button>
-                        ) : (
-                            <>
-                                <div style={{ fontSize: 13, color: "#666", fontWeight: 800 }}>Compare to:</div>
-                                <select
-                                    value={googleSelected || ""}
-                                    onChange={(e) => setGoogleSelected(e.target.value)}
-                                    style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #eee" }}
-                                >
-                                    <option value="">Select a calendar…</option>
-                                    {googleCalendars.map((c) => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.summary}{c.primary ? " (Primary)" : ""}
-                                        </option>
-                                    ))}
-                                </select>
+                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                {!googleConnected ? (
+                                    <button type="button" onClick={startGoogleConnect} style={toggleBtnStyle(false)}>
+                                        Connect Google Calendar
+                                    </button>
+                                ) : (
+                                    <>
+                                        <div style={{ fontSize: 13, color: "#666", fontWeight: 800 }}>Compare to:</div>
+                                        <select
+                                            value={googleSelected || ""}
+                                            onChange={(e) => setGoogleSelected(e.target.value)}
+                                            style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #eee" }}
+                                        >
+                                            <option value="">Select a calendar…</option>
+                                            {googleCalendars.map((c) => (
+                                                <option key={c.id} value={c.id}>
+                                                    {c.summary}{c.primary ? " (Primary)" : ""}
+                                                </option>
+                                            ))}
+                                        </select>
 
-                                {/* {googlePreviewEvents.length > 0 && (
+                                        {/* {googlePreviewEvents.length > 0 && (
                                     <div style={{ display: "flex", gap: 8 }}>
                                         <button
                                             onClick={() => setGoogleAppliedEvents(googlePreviewEvents)}
@@ -1080,24 +1120,24 @@ export default function ParentDashboard() {
                                     </div>
                                 )} */}
 
-                                {googleSelected ? (
-                                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                        <button
-                                            type="button"
-                                            disabled={googlePreviewLoading}
-                                            onClick={onApplyGoogleCompare}
-                                            style={{
-                                                ...toggleBtnStyle(false),
-                                                background: "#1f7aea",
-                                                borderColor: "#1f7aea",
-                                                color: "#fff",
-                                            }}
-                                        >
-                                            {googlePreviewLoading ? "Loading…" : "Apply"}
-                                        </button>
+                                        {googleSelected ? (
+                                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                                <button
+                                                    type="button"
+                                                    disabled={googlePreviewLoading}
+                                                    onClick={onApplyGoogleCompare}
+                                                    style={{
+                                                        ...toggleBtnStyle(false),
+                                                        background: "#1f7aea",
+                                                        borderColor: "#1f7aea",
+                                                        color: "#fff",
+                                                    }}
+                                                >
+                                                    {googlePreviewLoading ? "Loading…" : "Apply"}
+                                                </button>
 
 
-                                        {/* <button
+                                                {/* <button
                                             type="button"
                                             onClick={() => {
                                                 setGoogleSelected("");
@@ -1110,60 +1150,60 @@ export default function ParentDashboard() {
                                             Clear
                                         </button> */}
 
-                                        <button
-                                            type="button"
-                                            onClick={onClearGoogleCompare}
-                                            style={toggleBtnStyle(false)}
-                                        >
-                                            Clear
-                                        </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={onClearGoogleCompare}
+                                                    style={toggleBtnStyle(false)}
+                                                >
+                                                    Clear
+                                                </button>
 
-                                        <div style={{ fontSize: 12, color: "#666", fontWeight: 700 }}>
-                                            Preview: {googlePreviewEvents.length} busy block{googlePreviewEvents.length === 1 ? "" : "s"}
-                                            {googleAppliedEvents.length ? ` · Applied: ${googleAppliedEvents.length}` : ""}
-                                        </div>
+                                                <div style={{ fontSize: 12, color: "#666", fontWeight: 700 }}>
+                                                    Preview: {googlePreviewEvents.length} busy block{googlePreviewEvents.length === 1 ? "" : "s"}
+                                                    {googleAppliedEvents.length ? ` · Applied: ${googleAppliedEvents.length}` : ""}
+                                                </div>
 
-                                        {googlePreviewError ? (
-                                            <div style={{ fontSize: 12, color: "#b00020", fontWeight: 700 }}>
-                                                {googlePreviewError}
+                                                {googlePreviewError ? (
+                                                    <div style={{ fontSize: 12, color: "#b00020", fontWeight: 700 }}>
+                                                        {googlePreviewError}
+                                                    </div>
+                                                ) : null}
                                             </div>
                                         ) : null}
-                                    </div>
-                                ) : null}
-                            </>
-                        )}
-                    </div>
-                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", alignItems: "center", margin: "8px 0 -6px 0", flexWrap: "wrap" }}>
-                        <button
-                            onClick={() => setView("calendar")}
-                            style={{
-                                padding: "8px 12px",
-                                borderRadius: 10,
-                                border: "1px solid #ddd",
-                                background: view === "calendar" ? "#111" : "#fff",
-                                color: view === "calendar" ? "#fff" : "#111",
-                                fontWeight: 800,
-                                cursor: "pointer",
-                            }}
-                        >
-                            Calendar
-                        </button>
+                                    </>
+                                )}
+                            </div>
+                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", alignItems: "center", margin: "8px 0 -6px 0", flexWrap: "wrap" }}>
+                                <button
+                                    onClick={() => setView("calendar")}
+                                    style={{
+                                        padding: "8px 12px",
+                                        borderRadius: 10,
+                                        border: "1px solid #ddd",
+                                        background: view === "calendar" ? "#111" : "#fff",
+                                        color: view === "calendar" ? "#fff" : "#111",
+                                        fontWeight: 800,
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    Calendar
+                                </button>
 
-                        <button
-                            onClick={() => setView("list")}
-                            style={{
-                                padding: "8px 12px",
-                                borderRadius: 10,
-                                border: "1px solid #ddd",
-                                background: view === "list" ? "#111" : "#fff",
-                                color: view === "list" ? "#fff" : "#111",
-                                fontWeight: 800,
-                                cursor: "pointer",
-                            }}
-                        >
-                            List
-                        </button>
-                        {/* 
+                                <button
+                                    onClick={() => setView("list")}
+                                    style={{
+                                        padding: "8px 12px",
+                                        borderRadius: 10,
+                                        border: "1px solid #ddd",
+                                        background: view === "list" ? "#111" : "#fff",
+                                        color: view === "list" ? "#fff" : "#111",
+                                        fontWeight: 800,
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    List
+                                </button>
+                                {/* 
                         <button
                             type="button"
                             onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
@@ -1200,318 +1240,320 @@ export default function ParentDashboard() {
                             Next week →
                         </button> */}
 
-                        <p
-                            style={{
-                                fontSize: 14,
-                                color: "#1f7aea",
-                                fontWeight: 700,
-                                marginLeft: "auto",
-                            }}
-                        >
-                            Don’t see your calendar? Select one above and click <strong>Apply</strong>.
-                        </p>
+                                <p
+                                    style={{
+                                        fontSize: 14,
+                                        color: "#1f7aea",
+                                        fontWeight: 700,
+                                        marginLeft: "auto",
+                                    }}
+                                >
+                                    Don’t see your calendar? Select one above and click <strong>Apply</strong>.
+                                </p>
 
-                    </div>
-
-
-                    {view === "calendar" ? (
-                        // <BookingsCalendarWeek
-                        //     // bookings={calendarBookings}
-                        //     bookings={calendarBookingsWithCompare}
-                        //     onBookingClick={(booking) => {
-                        //         // IMPORTANT: BookingsCalendarWeekGrid passes the whole booking object
-                        //         // (not just an id), so we extract the id here.
-                        //         if (booking?.__kind === "gcal_busy") return;
-                        //         setSelectedBookingId(booking?.id || null);
-                        //         setView("list");
-                        //     }}
-                        // />
-
-                        // <BookingsCalendarWeek
-                        //     bookings={calendarBookingsWithCompare}
-                        //     onBookingClick={(booking) => {
-                        //         if (booking?.__kind === "gcal_busy") return;
-                        //         if (!booking?.id) return;
-                        //         setSelectedBookingId(booking.id);
-                        //         setView("list");
-                        //     }}
-                        // />
-
-                        <BookingsCalendarWeek
-                            bookings={calendarBookingsWithCompare}
-                            weekOffset={weekOffset}
-                            onWeekOffsetChange={setWeekOffset}
-                            maxWeekOffset={4}
-                            onBookingClick={(booking) => {
-                                if (booking?.__kind === "gcal_busy") return;
-                                if (!booking?.id) return;
-                                setSelectedBookingId(booking.id);
-                                setView("list");
-                            }}
-                        />
-
-                    ) : (
-                        <BookingsList
-                            bookings={bookings}
-                            selectedBookingId={selectedBookingId}
-                            onCancel={(booking) =>
-                                setCancelModal({
-                                    booking,
-                                    scope: "single",
-                                    reason: "",
-                                    confirmText: "",
-                                })
-                            }
-                            onPayNow={(booking) => startPoliPayForTutorOwed(booking?.tutor_id)}
-                        />
-                    )}
-
-                </div>
+                            </div>
 
 
+                            {view === "calendar" ? (
+                                // <BookingsCalendarWeek
+                                //     // bookings={calendarBookings}
+                                //     bookings={calendarBookingsWithCompare}
+                                //     onBookingClick={(booking) => {
+                                //         // IMPORTANT: BookingsCalendarWeekGrid passes the whole booking object
+                                //         // (not just an id), so we extract the id here.
+                                //         if (booking?.__kind === "gcal_busy") return;
+                                //         setSelectedBookingId(booking?.id || null);
+                                //         setView("list");
+                                //     }}
+                                // />
 
-                {/* <nav style={{ margin: "12px 0 24px", display: "flex", gap: 12 }}>
+                                // <BookingsCalendarWeek
+                                //     bookings={calendarBookingsWithCompare}
+                                //     onBookingClick={(booking) => {
+                                //         if (booking?.__kind === "gcal_busy") return;
+                                //         if (!booking?.id) return;
+                                //         setSelectedBookingId(booking.id);
+                                //         setView("list");
+                                //     }}
+                                // />
+
+                                <BookingsCalendarWeek
+                                    bookings={calendarBookingsWithCompare}
+                                    weekOffset={weekOffset}
+                                    onWeekOffsetChange={setWeekOffset}
+                                    maxWeekOffset={4}
+                                    onBookingClick={(booking) => {
+                                        if (booking?.__kind === "gcal_busy") return;
+                                        if (!booking?.id) return;
+                                        setSelectedBookingId(booking.id);
+                                        setView("list");
+                                    }}
+                                />
+
+                            ) : (
+                                <BookingsList
+                                    bookings={bookings}
+                                    selectedBookingId={selectedBookingId}
+                                    onCancel={(booking) =>
+                                        setCancelModal({
+                                            booking,
+                                            scope: "single",
+                                            reason: "",
+                                            confirmText: "",
+                                        })
+                                    }
+                                    onPayNow={(booking) => startPoliPayForBooking(booking?.id)}
+                                />
+                            )}
+
+                        </div>
+
+
+
+                        {/* <nav style={{ margin: "12px 0 24px", display: "flex", gap: 12 }}>
                     <Link href="/parent/dashboard">Dashboard</Link>
                     <Link href="/parent/students">Students</Link>
                 </nav> */}
 
-                {message && <p>{message}</p>}
+                        {message && <p>{message}</p>}
 
 
 
-                {/* Cancel modal */}
-                {cancelModal?.booking && (
-                    <div
-                        style={{
-                            position: "fixed",
-                            left: 0,
-                            top: 0,
-                            right: 0,
-                            bottom: 0,
-                            background: "rgba(0,0,0,0.35)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            zIndex: 9999,
-                            padding: 16,
-                        }}
-                        onClick={() => setCancelModal(null)}
-                    >
-                        <div
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                                width: "100%",
-                                maxWidth: 520,
-                                background: "#fff",
-                                borderRadius: 16,
-                                padding: 18,
-                                border: "1px solid #eee",
-                                boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-                            }}
-                        >
-                            {(() => {
-                                const b = cancelModal.booking;
-                                const studentName = b.students?.full_name || "Student";
-                                const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
-                                const isRecurring = Boolean(b.recurring_group_id || b.is_recurring);
+                        {/* Cancel modal */}
+                        {cancelModal?.booking && (
+                            <div
+                                style={{
+                                    position: "fixed",
+                                    left: 0,
+                                    top: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    background: "rgba(0,0,0,0.35)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    zIndex: 9999,
+                                    padding: 16,
+                                }}
+                                onClick={() => setCancelModal(null)}
+                            >
+                                <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                        width: "100%",
+                                        maxWidth: 520,
+                                        background: "#fff",
+                                        borderRadius: 16,
+                                        padding: 18,
+                                        border: "1px solid #eee",
+                                        boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                                    }}
+                                >
+                                    {(() => {
+                                        const b = cancelModal.booking;
+                                        const studentName = b.students?.full_name || "Student";
+                                        const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
+                                        const isRecurring = Boolean(b.recurring_group_id || b.is_recurring);
 
-                                return (
-                                    <>
-                                        <h3 style={{ margin: 0 }}>Cancel booking</h3>
-                                        <p style={{ margin: "8px 0 0", color: "#555" }}>
-                                            <strong>{studentName}</strong> • {formatISO(b.session_date)} • {timeRange}
-                                        </p>
+                                        return (
+                                            <>
+                                                <h3 style={{ margin: 0 }}>Cancel booking</h3>
+                                                <p style={{ margin: "8px 0 0", color: "#555" }}>
+                                                    <strong>{studentName}</strong> • {formatISO(b.session_date)} • {timeRange}
+                                                </p>
 
-                                        <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "#fafafa", border: "1px solid #eee" }}>
-                                            {isRecurring ? (
-                                                <>
-                                                    <div style={{ fontWeight: 900, marginBottom: 8 }}>This is part of a recurring booking.</div>
-                                                    <div style={{ display: "grid", gap: 10 }}>
-                                                        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
-                                                            <input
-                                                                type="radio"
-                                                                name="cancelScope"
-                                                                checked={cancelModal.scope === "single"}
-                                                                onChange={() => setCancelModal((m) => ({ ...m, scope: "single" }))}
-                                                            />
-                                                            <span>
-                                                                <strong>Cancel this lesson only</strong>
-                                                                <div style={{ color: "#666", fontSize: 13 }}>Only this date gets cancelled.</div>
-                                                            </span>
-                                                        </label>
+                                                <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "#fafafa", border: "1px solid #eee" }}>
+                                                    {isRecurring ? (
+                                                        <>
+                                                            <div style={{ fontWeight: 900, marginBottom: 8 }}>This is part of a recurring booking.</div>
+                                                            <div style={{ display: "grid", gap: 10 }}>
+                                                                <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                                                                    <input
+                                                                        type="radio"
+                                                                        name="cancelScope"
+                                                                        checked={cancelModal.scope === "single"}
+                                                                        onChange={() => setCancelModal((m) => ({ ...m, scope: "single" }))}
+                                                                    />
+                                                                    <span>
+                                                                        <strong>Cancel this lesson only</strong>
+                                                                        <div style={{ color: "#666", fontSize: 13 }}>Only this date gets cancelled.</div>
+                                                                    </span>
+                                                                </label>
 
-                                                        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
-                                                            <input
-                                                                type="radio"
-                                                                name="cancelScope"
-                                                                checked={cancelModal.scope === "series"}
-                                                                onChange={() => setCancelModal((m) => ({ ...m, scope: "series" }))}
-                                                            />
-                                                            <span>
-                                                                <strong>Cancel the rest of the recurring lessons</strong>
-                                                                <div style={{ color: "#666", fontSize: 13 }}>
-                                                                    Cancels this booking and all future bookings in the recurring series.
-                                                                </div>
-                                                            </span>
-                                                        </label>
+                                                                <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                                                                    <input
+                                                                        type="radio"
+                                                                        name="cancelScope"
+                                                                        checked={cancelModal.scope === "series"}
+                                                                        onChange={() => setCancelModal((m) => ({ ...m, scope: "series" }))}
+                                                                    />
+                                                                    <span>
+                                                                        <strong>Cancel the rest of the recurring lessons</strong>
+                                                                        <div style={{ color: "#666", fontSize: 13 }}>
+                                                                            Cancels this booking and all future bookings in the recurring series.
+                                                                        </div>
+                                                                    </span>
+                                                                </label>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div style={{ fontWeight: 900, marginBottom: 6 }}>This is a one-off booking.</div>
+                                                            <div style={{ color: "#666", fontSize: 13 }}>Are you sure you want to cancel it?</div>
+                                                        </>
+                                                    )}
+                                                </div>
+
+                                                <div style={{ marginTop: 14 }}>
+                                                    <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
+                                                        Reason for cancelling (required)
+                                                    </label>
+                                                    <textarea
+                                                        value={cancelModal.reason || ""}
+                                                        onChange={(e) => setCancelModal((m) => ({ ...m, reason: e.target.value }))}
+                                                        placeholder="e.g., Child is sick, timetable change, etc."
+                                                        rows={3}
+                                                        style={{
+                                                            width: "100%",
+                                                            padding: "10px 12px",
+                                                            borderRadius: 12,
+                                                            border: "1px solid #ddd",
+                                                            outline: "none",
+                                                            resize: "vertical",
+                                                        }}
+                                                    />
+                                                    <div style={{ marginTop: 6, color: "#777", fontSize: 12 }}>
+                                                        This will be included in the cancellation email.
                                                     </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div style={{ fontWeight: 900, marginBottom: 6 }}>This is a one-off booking.</div>
-                                                    <div style={{ color: "#666", fontSize: 13 }}>Are you sure you want to cancel it?</div>
-                                                </>
-                                            )}
-                                        </div>
+                                                </div>
 
-                                        <div style={{ marginTop: 14 }}>
-                                            <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
-                                                Reason for cancelling (required)
-                                            </label>
-                                            <textarea
-                                                value={cancelModal.reason || ""}
-                                                onChange={(e) => setCancelModal((m) => ({ ...m, reason: e.target.value }))}
-                                                placeholder="e.g., Child is sick, timetable change, etc."
-                                                rows={3}
-                                                style={{
-                                                    width: "100%",
-                                                    padding: "10px 12px",
-                                                    borderRadius: 12,
-                                                    border: "1px solid #ddd",
-                                                    outline: "none",
-                                                    resize: "vertical",
-                                                }}
-                                            />
-                                            <div style={{ marginTop: 6, color: "#777", fontSize: 12 }}>
-                                                This will be included in the cancellation email.
-                                            </div>
-                                        </div>
+                                                <div style={{ marginTop: 14 }}>
+                                                    <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
+                                                        Type <span style={{ fontFamily: "monospace" }}>CANCEL</span> to confirm
+                                                    </label>
+                                                    <input
+                                                        value={cancelModal.confirmText}
+                                                        onChange={(e) => setCancelModal((m) => ({ ...m, confirmText: e.target.value }))}
+                                                        placeholder="CANCEL"
+                                                        style={{
+                                                            width: "100%",
+                                                            padding: "10px 12px",
+                                                            borderRadius: 12,
+                                                            border: "1px solid #ddd",
+                                                            outline: "none",
+                                                            fontWeight: 800,
+                                                        }}
+                                                    />
+                                                </div>
 
-                                        <div style={{ marginTop: 14 }}>
-                                            <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
-                                                Type <span style={{ fontFamily: "monospace" }}>CANCEL</span> to confirm
-                                            </label>
-                                            <input
-                                                value={cancelModal.confirmText}
-                                                onChange={(e) => setCancelModal((m) => ({ ...m, confirmText: e.target.value }))}
-                                                placeholder="CANCEL"
-                                                style={{
-                                                    width: "100%",
-                                                    padding: "10px 12px",
-                                                    borderRadius: 12,
-                                                    border: "1px solid #ddd",
-                                                    outline: "none",
-                                                    fontWeight: 800,
-                                                }}
-                                            />
-                                        </div>
+                                                <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+                                                    <button
+                                                        onClick={() => setCancelModal(null)}
+                                                        style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", background: "#fff", fontWeight: 800 }}
+                                                    >
+                                                        Back
+                                                    </button>
 
-                                        <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
-                                            <button
-                                                onClick={() => setCancelModal(null)}
-                                                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", background: "#fff", fontWeight: 800 }}
-                                            >
-                                                Back
-                                            </button>
-
-                                            <button
-                                                disabled={
-                                                    cancelModal.confirmText.trim().toUpperCase() !== "CANCEL" ||
-                                                    !(cancelModal.reason || "").trim() ||
-                                                    updatingId === b.id
-                                                }
-                                                onClick={async () => {
-                                                    const scope = cancelModal.scope || "single";
-                                                    const reason = (cancelModal.reason || "").trim();
-                                                    setCancelModal(null);
-                                                    await handleCancelBooking(b, scope, reason);
-                                                }}
-                                                style={{
-                                                    padding: "10px 12px",
-                                                    borderRadius: 12,
-                                                    border: "none",
-                                                    background: "#e53935",
-                                                    color: "#fff",
-                                                    fontWeight: 900,
-                                                    opacity:
-                                                        cancelModal.confirmText.trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
-                                                            ? 1
-                                                            : 0.6,
-                                                    cursor:
-                                                        cancelModal.confirmText.trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
-                                                            ? "pointer"
-                                                            : "not-allowed",
-                                                }}
-                                            >
-                                                {updatingId === b.id ? "Cancelling..." : "Confirm cancel"}
-                                            </button>
-                                        </div>
-                                    </>
-                                );
+                                                    <button
+                                                        disabled={
+                                                            cancelModal.confirmText.trim().toUpperCase() !== "CANCEL" ||
+                                                            !(cancelModal.reason || "").trim() ||
+                                                            updatingId === b.id
+                                                        }
+                                                        onClick={async () => {
+                                                            const scope = cancelModal.scope || "single";
+                                                            const reason = (cancelModal.reason || "").trim();
+                                                            setCancelModal(null);
+                                                            await handleCancelBooking(b, scope, reason);
+                                                        }}
+                                                        style={{
+                                                            padding: "10px 12px",
+                                                            borderRadius: 12,
+                                                            border: "none",
+                                                            background: "#e53935",
+                                                            color: "#fff",
+                                                            fontWeight: 900,
+                                                            opacity:
+                                                                cancelModal.confirmText.trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
+                                                                    ? 1
+                                                                    : 0.6,
+                                                            cursor:
+                                                                cancelModal.confirmText.trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
+                                                                    ? "pointer"
+                                                                    : "not-allowed",
+                                                        }}
+                                                    >
+                                                        {updatingId === b.id ? "Cancelling..." : "Confirm cancel"}
+                                                    </button>
+                                                </div>
+                                            </>
+                                        );
 
 
-                            })()}
+                                    })()}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mobileBarSpacer" />
+
+                        {/* Mobile sticky action bar */}
+                        <div className="mobileBar">
+                            <div style={{ display: "flex", gap: 10 }}>
+                                <Link
+                                    href="/book"
+                                    style={{
+                                        flex: 1,
+                                        background: "#1f7aea",
+                                        color: "#fff",
+                                        padding: "12px 14px",
+                                        borderRadius: 12,
+                                        textDecoration: "none",
+                                        fontWeight: 900,
+                                        textAlign: "center",
+                                    }}
+                                >
+                                    Book
+                                </Link>
+
+                                <Link
+                                    href="/parent/students"
+                                    style={{
+                                        flex: 1,
+                                        border: "1px solid #ddd",
+                                        background: "#fff",
+                                        color: "#111",
+                                        padding: "12px 14px",
+                                        borderRadius: 12,
+                                        textDecoration: "none",
+                                        fontWeight: 900,
+                                        textAlign: "center",
+                                    }}
+                                >
+                                    Students
+                                </Link>
+
+                                <Link
+                                    href="/parent/profile"
+                                    style={{
+                                        flex: 1,
+                                        border: "1px solid #ddd",
+                                        background: "#fff",
+                                        color: "#111",
+                                        padding: "12px 14px",
+                                        borderRadius: 12,
+                                        textDecoration: "none",
+                                        fontWeight: 900,
+                                        textAlign: "center",
+                                    }}
+                                >
+                                    Profile
+                                </Link>
+                            </div>
                         </div>
                     </div>
-                )}
-
-                <div className="mobileBarSpacer" />
-
-                {/* Mobile sticky action bar */}
-                <div className="mobileBar">
-                    <div style={{ display: "flex", gap: 10 }}>
-                        <Link
-                            href="/book"
-                            style={{
-                                flex: 1,
-                                background: "#1f7aea",
-                                color: "#fff",
-                                padding: "12px 14px",
-                                borderRadius: 12,
-                                textDecoration: "none",
-                                fontWeight: 900,
-                                textAlign: "center",
-                            }}
-                        >
-                            Book
-                        </Link>
-
-                        <Link
-                            href="/parent/students"
-                            style={{
-                                flex: 1,
-                                border: "1px solid #ddd",
-                                background: "#fff",
-                                color: "#111",
-                                padding: "12px 14px",
-                                borderRadius: 12,
-                                textDecoration: "none",
-                                fontWeight: 900,
-                                textAlign: "center",
-                            }}
-                        >
-                            Students
-                        </Link>
-
-                        <Link
-                            href="/parent/profile"
-                            style={{
-                                flex: 1,
-                                border: "1px solid #ddd",
-                                background: "#fff",
-                                color: "#111",
-                                padding: "12px 14px",
-                                borderRadius: 12,
-                                textDecoration: "none",
-                                fontWeight: 900,
-                                textAlign: "center",
-                            }}
-                        >
-                            Profile
-                        </Link>
-                    </div>
-                </div>
+                </div >
             </div>
-        </div >
+        </>
     );
 }

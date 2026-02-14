@@ -16,6 +16,7 @@ export default function PaymentPopup({
     onClose,
     onDone,
     onStartPoliPay,
+    onSelectCash,
     onPayWithCredit,
     creditBalance,
     onCopied,
@@ -49,6 +50,27 @@ export default function PaymentPopup({
     const handleDone = () => {
         if (typeof onDone === "function") return onDone();
         if (typeof onClose === "function") return onClose();
+    };
+
+    const handleChoosePayNow = async () => {
+        setPaymentChoice("pay_now");
+
+        // UX: choosing Pay now should immediately start the POLi flow.
+        // If bookingId is missing, we cannot redirect.
+        if (typeof onStartPoliPay === "function" && payment?.bookingId) {
+            await onStartPoliPay(payment.bookingId);
+        }
+    };
+
+    const handleChooseCash = async () => {
+        setPaymentChoice("cash");
+
+        // Best-effort: store cash choice, then close.
+        if (typeof onSelectCash === "function" && payment?.bookingId) {
+            await onSelectCash(payment.bookingId);
+        }
+
+        handleDone();
     };
 
     return (
@@ -196,7 +218,7 @@ export default function PaymentPopup({
                     <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap" }}>
                         <button
                             type="button"
-                            onClick={() => setPaymentChoice("pay_now")}
+                            onClick={handleChoosePayNow}
                             style={{
                                 border: paymentChoice === "pay_now" ? "1px solid #111" : "1px solid #ddd",
                                 background: "#fff",
@@ -212,7 +234,7 @@ export default function PaymentPopup({
                         {canPayCash ? (
                             <button
                                 type="button"
-                                onClick={() => setPaymentChoice("cash")}
+                                onClick={handleChooseCash}
                                 style={{
                                     border: paymentChoice === "cash" ? "1px solid #111" : "1px solid #ddd",
                                     background: "#fff",

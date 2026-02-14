@@ -23,17 +23,16 @@ export default function BookingCalendar({
     loadingWeek = false,
     selectedStudentId = "",
 
-    // Formatting helpers from parent
     formatISO,
     minutesToTime,
     timeToMinutes,
 
-    // Status helper from parent
     statusToBucket,
 
-    // Actions
-    onCellClick, // ({ date, start }) => void
-    onHoverRange, // optional: (range|null) => void
+    onCellClick,
+    onHoverRange,
+
+    selectedSlot = null,
 }) {
     const isLoading = loadingWeek;
 
@@ -122,6 +121,19 @@ export default function BookingCalendar({
             borderBottomLeftRadius: isBottomHalf ? 6 : 0,
             borderBottomRightRadius: isBottomHalf ? 6 : 0,
             boxSizing: "border-box",
+        };
+    };
+
+    const isSelectedSlice = (isoDate, minute) => {
+        if (!selectedSlot) return false;
+        if (selectedSlot.date !== isoDate) return false;
+        return minute >= selectedSlot.start && minute < selectedSlot.end;
+    };
+
+    const selectedStyle = (isoDate, minute) => {
+        if (!isSelectedSlice(isoDate, minute)) return {};
+        return {
+            background: "#dbeafe", // light blue
         };
     };
 
@@ -245,6 +257,8 @@ export default function BookingCalendar({
 
                                             // Hover preview outline
                                             ...slotOutlineStyle(d.iso, start00),
+
+                                            ...selectedStyle(d.iso, start00),
                                         }}
                                         title={cellTitle(start00, myBooking00, otherBooking00, finalCanBook00)}
                                     >
@@ -286,6 +300,8 @@ export default function BookingCalendar({
 
                                             // Hover preview outline
                                             ...slotOutlineStyle(d.iso, start30),
+
+                                            ...selectedStyle(d.iso, start30),
                                         }}
                                         title={cellTitle(start30, myBooking30, otherBooking30, finalCanBook30)}
                                     >

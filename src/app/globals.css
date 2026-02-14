@@ -66,3 +66,20 @@ a {
 .gridInner {
   min-width: 820px;
 }
+
+@media (max-width: 640px) {
+
+  /* Let calendars stretch to the screen edges on mobile */
+  .gridScroll {
+    margin-left: -12px;
+    margin-right: -12px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  /* Optional: slightly reduce minimum width so columns don't feel ultra-squished */
+  .gridInner {
+    min-width: 760px;
+  }
+}

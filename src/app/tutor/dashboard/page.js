@@ -12,8 +12,14 @@ import BookingsCalendarWeek from "../../parent/dashboard/components/BookingsCale
 import TutorBookingsList from "./components/TutorBookingsList";
 import TutorTopBar from "./components/TutorTopBar";
 import TutorHeroCard from "./components/TutorHeroCard";
+import BlockingLoader from "../../components/BlockingLoader";
 // import AvailabilityGrid from "./components/AvailabilityGrid";
 // import TutorAvailabilityInline from "./components/TutorAvailabilityInline";
+
+const getSupabaseAccessToken = async () => {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+};
 
 export default function TutorDashboard() {
     const router = useRouter();
@@ -36,6 +42,50 @@ export default function TutorDashboard() {
     const [busyStart, setBusyStart] = useState("09:00");
     const [busyEnd, setBusyEnd] = useState("10:00");
     const [busyTitle, setBusyTitle] = useState("Busy - DarshaTutor");
+
+    const blocking = checking || Boolean(updatingKey);
+    const blockingText =
+        checking ? "Loading..." :
+            updatingKey ? "Updating..." :
+                "Loading...";
+
+    const addBookingToGoogle = async (booking) => {
+        if (!booking?.id) return;
+
+        setUpdatingKey(`google-${booking.id}`);
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            const res = await fetch("/api/tutor/bookings/add-to-google", {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ bookingId: booking.id }),
+            });
+
+            const json = await res.json().catch(() => ({}));
+
+            if (!res.ok || !json?.ok) {
+                setMessage(json?.error || "Failed to add to Google Calendar");
+                return;
+            }
+
+            // Update local state so the button disappears
+            setBookings((prev) =>
+                (prev || []).map((b) =>
+                    b.id === booking.id
+                        ? { ...b, google_event_id: json.google_event_id || b.google_event_id, google_event_link: json.google_event_link || b.google_event_link }
+                        : b
+                )
+            );
+        } finally {
+            setUpdatingKey("");
+        }
+    };
 
     const createBusyBlock = async () => {
         setMessage("");
@@ -173,6 +223,8 @@ export default function TutorDashboard() {
             .from("bookings")
             .select(`
                 id,
+                google_event_id,
+                google_event_link,
                 session_date,
                 start_time,
                 end_time,
@@ -579,154 +631,158 @@ export default function TutorDashboard() {
     if (checking) return <p style={{ padding: 32 }}>Checking access...</p>;
 
     return (
-        <div style={{ padding: 24, background: "#fafafa", minHeight: "100vh" }}>
-            <div style={{ maxWidth: 980, margin: "0 auto" }}>
-                <TutorTopBar firstName={(tutorRecord?.display_name || "").split(" ")[0]} />
+        <>
+            <BlockingLoader show={blocking} text={blockingText} />
+            <div className="appShell">
+                <div style={{ padding: 24, background: "#fafafa", minHeight: "100vh" }}>
+                    <div style={{ maxWidth: 980, margin: "0 auto" }}>
+                        <TutorTopBar firstName={(tutorRecord?.display_name || "").split(" ")[0]} />
 
-                <TutorHeroCard tutor={tutorRecord} stats={computeStats(bookings)} />
+                        <TutorHeroCard tutor={tutorRecord} stats={computeStats(bookings)} />
 
-                {message ? (
-                    <div style={{ marginTop: 12, padding: 10, borderRadius: 12, background: "#fff7e6", border: "1px solid #ffe0a3" }}>
-                        {message}
-                    </div>
-                ) : null}
+                        {message ? (
+                            <div style={{ marginTop: 12, padding: 10, borderRadius: 12, background: "#fff7e6", border: "1px solid #ffe0a3" }}>
+                                {message}
+                            </div>
+                        ) : null}
 
-                <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                    <h3 style={{ margin: "0 0 8px 0" }}>Google Calendar</h3>
+                        <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                            <h3 style={{ margin: "0 0 8px 0" }}>Google Calendar</h3>
 
-                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 14 }}>
-                            Status: <b>{googleConnected ? "Connected" : "Not connected"}</b>
-                        </div>
-                        <button onClick={startGoogleConnectTutor} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>
-                            Connect / Reconnect Google
-                        </button>
-                        <button onClick={checkGoogleConnected} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>
-                            Refresh status
-                        </button>
-                    </div>
+                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                <div style={{ fontSize: 14 }}>
+                                    Status: <b>{googleConnected ? "Connected" : "Not connected"}</b>
+                                </div>
+                                <button onClick={startGoogleConnectTutor} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>
+                                    Connect / Reconnect Google
+                                </button>
+                                <button onClick={checkGoogleConnected} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}>
+                                    Refresh status
+                                </button>
+                            </div>
 
-                    <div style={{ marginTop: 12, display: "grid", gap: 8, maxWidth: 420 }}>
-                        <label>
-                            Date
-                            <input value={busyDate} onChange={(e) => setBusyDate(e.target.value)} type="date" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
-                        </label>
+                            <div style={{ marginTop: 12, display: "grid", gap: 8, maxWidth: 420 }}>
+                                <label>
+                                    Date
+                                    <input value={busyDate} onChange={(e) => setBusyDate(e.target.value)} type="date" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
+                                </label>
 
-                        <label>
-                            Start
-                            <input value={busyStart} onChange={(e) => setBusyStart(e.target.value)} type="time" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
-                        </label>
+                                <label>
+                                    Start
+                                    <input value={busyStart} onChange={(e) => setBusyStart(e.target.value)} type="time" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
+                                </label>
 
-                        <label>
-                            End
-                            <input value={busyEnd} onChange={(e) => setBusyEnd(e.target.value)} type="time" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
-                        </label>
+                                <label>
+                                    End
+                                    <input value={busyEnd} onChange={(e) => setBusyEnd(e.target.value)} type="time" style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
+                                </label>
 
-                        <label>
-                            Title
-                            <input value={busyTitle} onChange={(e) => setBusyTitle(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
-                        </label>
+                                <label>
+                                    Title
+                                    <input value={busyTitle} onChange={(e) => setBusyTitle(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #ddd" }} />
+                                </label>
 
-                        <button onClick={createBusyBlock} disabled={!googleConnected || !busyDate} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff", cursor: "pointer" }}>
-                            Add busy block
-                        </button>
+                                <button onClick={createBusyBlock} disabled={!googleConnected || !busyDate} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff", cursor: "pointer" }}>
+                                    Add busy block
+                                </button>
 
-                        {!googleConnected && <div style={{ fontSize: 12, color: "#777" }}>Reconnect Google (tutor scope) to enable creating events.</div>}
-                    </div>
-                </div>
-
-
-                <div style={{ display: "block", gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 0.65fr)", gap: 14, marginTop: 14, alignItems: "start" }}>
-                    <div style={{ minWidth: 0 }}>
-                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", margin: "8px 0 10px 0" }}>
-                            <button type="button" onClick={() => setView("calendar")} style={toggleBtnStyle(view === "calendar")}>Calendar</button>
-                            <button type="button" onClick={() => setView("list")} style={toggleBtnStyle(view === "list")}>List</button>
-                        </div>
-
-                        <div style={{ display: "flex", gap: 8, margin: "8px 0 12px 0", flexWrap: "wrap" }}>
-                            <button type="button" style={ghostBtnStyle} onClick={() => setWeekOffset((w) => w - 1)}>
-                                ◀ Previous week
-                            </button>
-                            <button type="button" style={ghostBtnStyle} onClick={() => setWeekOffset(0)}>
-                                This week
-                            </button>
-                            <button type="button" style={ghostBtnStyle} onClick={() => setWeekOffset((w) => w + 1)}>
-                                Next week ▶
-                            </button>
+                                {!googleConnected && <div style={{ fontSize: 12, color: "#777" }}>Reconnect Google (tutor scope) to enable creating events.</div>}
+                            </div>
                         </div>
 
 
-                        {view === "calendar" ? (
-                            // <BookingsCalendarWeek
-                            //     bookings={calendarBookings}
-                            //     onBookingClick={onCalendarBookingClick}
-                            //     getBlockTitle={(b) => b?.students?.full_name || "Student"}
-                            //     getBlockSub={(b) => b?.subjects?.name || ""}
-                            //     getBlockMeta={(b) => {
-                            //         const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
-                            //         const s = String(b.status || "").toLowerCase();
-                            //         const p = b.payment_status || "unpaid";
-                            //         return `${timeRange} · ${s} · ${p}`;
-                            //     }}
-                            // />
+                        <div style={{ display: "block", gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 0.65fr)", gap: 14, marginTop: 14, alignItems: "start" }}>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", margin: "8px 0 10px 0" }}>
+                                    <button type="button" onClick={() => setView("calendar")} style={toggleBtnStyle(view === "calendar")}>Calendar</button>
+                                    <button type="button" onClick={() => setView("list")} style={toggleBtnStyle(view === "list")}>List</button>
+                                </div>
 
-                            <BookingsCalendarWeek
-                                bookings={calendarItems}
-                                weekOffset={weekOffset}
-                                onEmptySlotClick={(slot) => openCreateBusyModal(slot)}
-                                onBookingClick={(item) => {
-                                    if (item.__type === "busy") {
-                                        openEditBusyModal(item);
-                                        return;
-                                    }
-                                    onCalendarBookingClick(item);
-                                }}
+                                <div style={{ display: "flex", gap: 8, margin: "8px 0 12px 0", flexWrap: "wrap" }}>
+                                    <button type="button" style={ghostBtnStyle} onClick={() => setWeekOffset((w) => w - 1)}>
+                                        ◀ Previous week
+                                    </button>
+                                    <button type="button" style={ghostBtnStyle} onClick={() => setWeekOffset(0)}>
+                                        This week
+                                    </button>
+                                    <button type="button" style={ghostBtnStyle} onClick={() => setWeekOffset((w) => w + 1)}>
+                                        Next week ▶
+                                    </button>
+                                </div>
 
-                                getBlockTitle={(item) => (item.__type === "busy" ? (item.note ? item.note : "Blocked") : item?.students?.full_name || "Parent")}
-                                // getBlockSub={(item) => (item.__type === "busy" ? "Busy" : item?.subjects?.name || "")}
-                                getBlockSub={(item) =>
-                                    item.__type === "busy"
-                                        ? (item.note ? item.note : "Blocked")
-                                        : item?.parent?.full_name || ""
-                                }
-                                getBlockMeta={(item) => {
-                                    const timeRange = `${String(item.start_time).slice(0, 5)} - ${String(item.end_time).slice(0, 5)}`;
-                                    return item.__type === "busy" ? timeRange : `${timeRange} · ${String(item.status || "").toLowerCase()}`;
-                                }}
-                                getBlockStyle={(item) => {
-                                    if (item.__type !== "busy") return {};
-                                    return {
-                                        background: "#f2f2f2",
-                                        border: "2px dashed #999",
-                                        color: "#333",
-                                    };
-                                }}
-                            />
 
-                        ) : (
-                            <TutorBookingsList
-                                bookings={bookings}
-                                selectedBookingId={selectedBookingId}
-                                updatingKey={updatingKey}
-                                onAccept={(b) => updateBookingStatus(b.id, "accepted")}
-                                onReject={(b) => updateBookingStatus(b.id, "rejected")}
-                                onCancel={(booking) =>
-                                    setCancelModal({
-                                        booking,
-                                        reason: "",
-                                        confirmText: "",
-                                    })
-                                }
-                                onAcceptSeries={(b) => updateRecurringGroupStatus(b.recurring_group_id, "accepted")}
-                                onRejectSeries={(b) => updateRecurringGroupStatus(b.recurring_group_id, "rejected")}
-                                onMarkPaid={(b) => markPaid(b.id, null)}
-                                onMarkPaidSeries={(b) => markPaid(null, b.recurring_group_id)}
-                            />
-                        )}
-                    </div>
+                                {view === "calendar" ? (
+                                    // <BookingsCalendarWeek
+                                    //     bookings={calendarBookings}
+                                    //     onBookingClick={onCalendarBookingClick}
+                                    //     getBlockTitle={(b) => b?.students?.full_name || "Student"}
+                                    //     getBlockSub={(b) => b?.subjects?.name || ""}
+                                    //     getBlockMeta={(b) => {
+                                    //         const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
+                                    //         const s = String(b.status || "").toLowerCase();
+                                    //         const p = b.payment_status || "unpaid";
+                                    //         return `${timeRange} · ${s} · ${p}`;
+                                    //     }}
+                                    // />
 
-                    <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
-                        {/* <div id="availability-panel">
+                                    <BookingsCalendarWeek
+                                        bookings={calendarItems}
+                                        weekOffset={weekOffset}
+                                        onEmptySlotClick={(slot) => openCreateBusyModal(slot)}
+                                        onBookingClick={(item) => {
+                                            if (item.__type === "busy") {
+                                                openEditBusyModal(item);
+                                                return;
+                                            }
+                                            onCalendarBookingClick(item);
+                                        }}
+
+                                        getBlockTitle={(item) => (item.__type === "busy" ? (item.note ? item.note : "Blocked") : item?.students?.full_name || "Parent")}
+                                        // getBlockSub={(item) => (item.__type === "busy" ? "Busy" : item?.subjects?.name || "")}
+                                        getBlockSub={(item) =>
+                                            item.__type === "busy"
+                                                ? (item.note ? item.note : "Blocked")
+                                                : item?.parent?.full_name || ""
+                                        }
+                                        getBlockMeta={(item) => {
+                                            const timeRange = `${String(item.start_time).slice(0, 5)} - ${String(item.end_time).slice(0, 5)}`;
+                                            return item.__type === "busy" ? timeRange : `${timeRange} · ${String(item.status || "").toLowerCase()}`;
+                                        }}
+                                        getBlockStyle={(item) => {
+                                            if (item.__type !== "busy") return {};
+                                            return {
+                                                background: "#f2f2f2",
+                                                border: "2px dashed #999",
+                                                color: "#333",
+                                            };
+                                        }}
+                                    />
+
+                                ) : (
+                                    <TutorBookingsList
+                                        bookings={bookings}
+                                        onAddToGoogle={addBookingToGoogle}
+                                        selectedBookingId={selectedBookingId}
+                                        updatingKey={updatingKey}
+                                        onAccept={(b) => updateBookingStatus(b.id, "accepted")}
+                                        onReject={(b) => updateBookingStatus(b.id, "rejected")}
+                                        onCancel={(booking) =>
+                                            setCancelModal({
+                                                booking,
+                                                reason: "",
+                                                confirmText: "",
+                                            })
+                                        }
+                                        onAcceptSeries={(b) => updateRecurringGroupStatus(b.recurring_group_id, "accepted")}
+                                        onRejectSeries={(b) => updateRecurringGroupStatus(b.recurring_group_id, "rejected")}
+                                        onMarkPaid={(b) => markPaid(b.id, null)}
+                                        onMarkPaidSeries={(b) => markPaid(null, b.recurring_group_id)}
+                                    />
+                                )}
+                            </div>
+
+                            <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+                                {/* <div id="availability-panel">
                             <Panel title="Availability">
                                 <div style={{ color: "#555", fontSize: 13, marginBottom: 10 }}>
                                     Click on a slot to add a busy block. Click a busy block to edit.
@@ -748,276 +804,278 @@ export default function TutorDashboard() {
                             </Panel>
                         </div> */}
 
-                    </div>
-                    <Panel title="Profile">
-                        <div style={{ display: "grid", gap: 6, color: "#555", fontSize: 13 }}>
-                            <div><span style={{ color: "#777" }}>Email:</span> <b>{tutorRecord?.email || "Not set"}</b></div>
-                            <div><span style={{ color: "#777" }}>Phone:</span> <b>{tutorRecord?.phone || "Not set"}</b></div>
-                            <div><span style={{ color: "#777" }}>Bank:</span> <b>{formatBankMask(tutorRecord?.bank_account_masked)}</b></div>
-                        </div>
-                        <div style={{ marginTop: 10 }}>
-                            <Link href="/tutor/profile">Edit profile</Link>
-                        </div>
-                    </Panel>
+                            </div>
+                            <Panel title="Profile">
+                                <div style={{ display: "grid", gap: 6, color: "#555", fontSize: 13 }}>
+                                    <div><span style={{ color: "#777" }}>Email:</span> <b>{tutorRecord?.email || "Not set"}</b></div>
+                                    <div><span style={{ color: "#777" }}>Phone:</span> <b>{tutorRecord?.phone || "Not set"}</b></div>
+                                    <div><span style={{ color: "#777" }}>Bank:</span> <b>{formatBankMask(tutorRecord?.bank_account_masked)}</b></div>
+                                </div>
+                                <div style={{ marginTop: 10 }}>
+                                    <Link href="/tutor/profile">Edit profile</Link>
+                                </div>
+                            </Panel>
 
-                    {/* Cancel modal (tutor must provide a reason) */}
-                    {cancelModal?.booking && (
-                        <div
-                            style={{
-                                position: "fixed",
-                                inset: 0,
-                                background: "rgba(0,0,0,0.35)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                zIndex: 9999,
-                                padding: 16,
-                            }}
-                            onClick={() => setCancelModal(null)}
-                        >
-                            <div
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                    width: "100%",
-                                    maxWidth: 520,
-                                    background: "#fff",
-                                    borderRadius: 16,
-                                    padding: 18,
-                                    border: "1px solid #eee",
-                                    boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-                                }}
-                            >
-                                {(() => {
-                                    const b = cancelModal.booking;
-                                    const studentName = b?.students?.full_name || "Student";
-                                    const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
+                            {/* Cancel modal (tutor must provide a reason) */}
+                            {cancelModal?.booking && (
+                                <div
+                                    style={{
+                                        position: "fixed",
+                                        inset: 0,
+                                        background: "rgba(0,0,0,0.35)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        zIndex: 9999,
+                                        padding: 16,
+                                    }}
+                                    onClick={() => setCancelModal(null)}
+                                >
+                                    <div
+                                        onClick={(e) => e.stopPropagation()}
+                                        style={{
+                                            width: "100%",
+                                            maxWidth: 520,
+                                            background: "#fff",
+                                            borderRadius: 16,
+                                            padding: 18,
+                                            border: "1px solid #eee",
+                                            boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                                        }}
+                                    >
+                                        {(() => {
+                                            const b = cancelModal.booking;
+                                            const studentName = b?.students?.full_name || "Student";
+                                            const timeRange = `${String(b.start_time).slice(0, 5)} - ${String(b.end_time).slice(0, 5)}`;
 
-                                    return (
-                                        <>
-                                            <h3 style={{ margin: 0 }}>Cancel lesson</h3>
-                                            <p style={{ margin: "8px 0 0", color: "#555" }}>
-                                                <strong>{studentName}</strong> • {formatISO(b.session_date)} • {timeRange}
-                                            </p>
+                                            return (
+                                                <>
+                                                    <h3 style={{ margin: 0 }}>Cancel lesson</h3>
+                                                    <p style={{ margin: "8px 0 0", color: "#555" }}>
+                                                        <strong>{studentName}</strong> • {formatISO(b.session_date)} • {timeRange}
+                                                    </p>
 
-                                            <div style={{ marginTop: 14 }}>
-                                                <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
-                                                    Reason for cancelling (required)
-                                                </label>
-                                                <textarea
-                                                    value={cancelModal.reason || ""}
-                                                    onChange={(e) => setCancelModal((m) => ({ ...m, reason: e.target.value }))}
-                                                    placeholder="e.g., illness, emergency, timetable change, etc."
-                                                    rows={3}
-                                                    style={{
-                                                        width: "100%",
-                                                        padding: "10px 12px",
-                                                        borderRadius: 12,
-                                                        border: "1px solid #ddd",
-                                                        outline: "none",
-                                                        resize: "vertical",
-                                                    }}
-                                                />
-                                                <div style={{ marginTop: 6, color: "#777", fontSize: 12 }}>
-                                                    This will be included in the cancellation email.
+                                                    <div style={{ marginTop: 14 }}>
+                                                        <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
+                                                            Reason for cancelling (required)
+                                                        </label>
+                                                        <textarea
+                                                            value={cancelModal.reason || ""}
+                                                            onChange={(e) => setCancelModal((m) => ({ ...m, reason: e.target.value }))}
+                                                            placeholder="e.g., illness, emergency, timetable change, etc."
+                                                            rows={3}
+                                                            style={{
+                                                                width: "100%",
+                                                                padding: "10px 12px",
+                                                                borderRadius: 12,
+                                                                border: "1px solid #ddd",
+                                                                outline: "none",
+                                                                resize: "vertical",
+                                                            }}
+                                                        />
+                                                        <div style={{ marginTop: 6, color: "#777", fontSize: 12 }}>
+                                                            This will be included in the cancellation email.
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ marginTop: 14 }}>
+                                                        <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
+                                                            Type <span style={{ fontFamily: "monospace" }}>CANCEL</span> to confirm
+                                                        </label>
+                                                        <input
+                                                            value={cancelModal.confirmText || ""}
+                                                            onChange={(e) => setCancelModal((m) => ({ ...m, confirmText: e.target.value }))}
+                                                            placeholder="CANCEL"
+                                                            style={{
+                                                                width: "100%",
+                                                                padding: "10px 12px",
+                                                                borderRadius: 12,
+                                                                border: "1px solid #ddd",
+                                                                outline: "none",
+                                                                fontWeight: 800,
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+                                                        <button
+                                                            onClick={() => setCancelModal(null)}
+                                                            style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", background: "#fff", fontWeight: 800 }}
+                                                        >
+                                                            Back
+                                                        </button>
+
+                                                        <button
+                                                            disabled={
+                                                                String(cancelModal.confirmText || "").trim().toUpperCase() !== "CANCEL" ||
+                                                                !(cancelModal.reason || "").trim() ||
+                                                                updatingKey === `cancel-${b.id}`
+                                                            }
+                                                            onClick={async () => {
+                                                                const reason = (cancelModal.reason || "").trim();
+                                                                setCancelModal(null);
+                                                                await cancelBookingAsTutor(b, reason);
+                                                            }}
+                                                            style={{
+                                                                padding: "10px 12px",
+                                                                borderRadius: 12,
+                                                                border: "none",
+                                                                background: "#e53935",
+                                                                color: "#fff",
+                                                                fontWeight: 900,
+                                                                opacity:
+                                                                    String(cancelModal.confirmText || "").trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
+                                                                        ? 1
+                                                                        : 0.6,
+                                                                cursor:
+                                                                    String(cancelModal.confirmText || "").trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
+                                                                        ? "pointer"
+                                                                        : "not-allowed",
+                                                            }}
+                                                        >
+                                                            {updatingKey === `cancel-${b.id}` ? "Cancelling..." : "Confirm cancel"}
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            )}
+
+                            {busyModalOpen ? (
+                                <div
+                                    style={{
+                                        position: "fixed",
+                                        inset: 0,
+                                        background: "rgba(0,0,0,0.25)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        padding: 16,
+                                        zIndex: 9999,
+                                    }}
+                                    onClick={() => !busySaving && setBusyModalOpen(false)}
+                                >
+                                    <div
+                                        style={{
+                                            width: "100%",
+                                            maxWidth: 520,
+                                            background: "#fff",
+                                            borderRadius: 18,
+                                            border: "1px solid #eee",
+                                            padding: 16,
+                                            boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                                            <div style={{ fontWeight: 950, fontSize: 16 }}>
+                                                {busyModalMode === "create" ? "Add busy block" : "Edit busy block"}
+                                            </div>
+
+                                            <button type="button" style={ghostBtnStyle} disabled={busySaving} onClick={() => setBusyModalOpen(false)}>
+                                                Close
+                                            </button>
+                                        </div>
+
+                                        <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                                                <div>
+                                                    <div style={{ fontSize: 12, color: "#666", fontWeight: 800, marginBottom: 6 }}>Date</div>
+                                                    <input
+                                                        type="date"
+                                                        value={busyDraft.date}
+                                                        onChange={(e) => setBusyDraft((p) => ({ ...p, date: e.target.value }))}
+                                                        style={inputStyle}
+                                                        disabled={busySaving}
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <div style={{ fontSize: 12, color: "#666", fontWeight: 800, marginBottom: 6 }}>Note</div>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Optional note (e.g., School pickup)"
+                                                        value={busyDraft.note}
+                                                        onChange={(e) => setBusyDraft((p) => ({ ...p, note: e.target.value }))}
+                                                        style={inputStyle}
+                                                        disabled={busySaving}
+                                                    />
                                                 </div>
                                             </div>
 
-                                            <div style={{ marginTop: 14 }}>
-                                                <label style={{ display: "block", fontWeight: 900, marginBottom: 6 }}>
-                                                    Type <span style={{ fontFamily: "monospace" }}>CANCEL</span> to confirm
-                                                </label>
-                                                <input
-                                                    value={cancelModal.confirmText || ""}
-                                                    onChange={(e) => setCancelModal((m) => ({ ...m, confirmText: e.target.value }))}
-                                                    placeholder="CANCEL"
-                                                    style={{
-                                                        width: "100%",
-                                                        padding: "10px 12px",
-                                                        borderRadius: 12,
-                                                        border: "1px solid #ddd",
-                                                        outline: "none",
-                                                        fontWeight: 800,
-                                                    }}
-                                                />
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                                                <div>
+                                                    <div style={{ fontSize: 12, color: "#666", fontWeight: 800, marginBottom: 6 }}>Start</div>
+                                                    <input
+                                                        type="time"
+                                                        value={busyDraft.start_time}
+                                                        onChange={(e) => setBusyDraft((p) => ({ ...p, start_time: e.target.value }))}
+                                                        style={inputStyle}
+                                                        disabled={busySaving}
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <div style={{ fontSize: 12, color: "#666", fontWeight: 800, marginBottom: 6 }}>End</div>
+                                                    <input
+                                                        type="time"
+                                                        value={busyDraft.end_time}
+                                                        onChange={(e) => setBusyDraft((p) => ({ ...p, end_time: e.target.value }))}
+                                                        style={inputStyle}
+                                                        disabled={busySaving}
+                                                    />
+                                                </div>
                                             </div>
 
-                                            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
-                                                <button
-                                                    onClick={() => setCancelModal(null)}
-                                                    style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", background: "#fff", fontWeight: 800 }}
-                                                >
-                                                    Back
-                                                </button>
+                                            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 6 }}>
+                                                {busyModalMode === "edit" ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={deleteBusyBlock}
+                                                        disabled={busySaving}
+                                                        style={{
+                                                            padding: "10px 12px",
+                                                            borderRadius: 12,
+                                                            border: "1px solid #eee",
+                                                            background: "#fff",
+                                                            fontWeight: 900,
+                                                            color: "#b00020",
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                ) : (
+                                                    <div />
+                                                )}
 
                                                 <button
-                                                    disabled={
-                                                        String(cancelModal.confirmText || "").trim().toUpperCase() !== "CANCEL" ||
-                                                        !(cancelModal.reason || "").trim() ||
-                                                        updatingKey === `cancel-${b.id}`
-                                                    }
-                                                    onClick={async () => {
-                                                        const reason = (cancelModal.reason || "").trim();
-                                                        setCancelModal(null);
-                                                        await cancelBookingAsTutor(b, reason);
-                                                    }}
+                                                    type="button"
+                                                    onClick={saveBusyBlock}
+                                                    disabled={busySaving}
                                                     style={{
                                                         padding: "10px 12px",
                                                         borderRadius: 12,
-                                                        border: "none",
-                                                        background: "#e53935",
+                                                        border: "1px solid #111",
+                                                        background: "#111",
                                                         color: "#fff",
                                                         fontWeight: 900,
-                                                        opacity:
-                                                            String(cancelModal.confirmText || "").trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
-                                                                ? 1
-                                                                : 0.6,
-                                                        cursor:
-                                                            String(cancelModal.confirmText || "").trim().toUpperCase() === "CANCEL" && (cancelModal.reason || "").trim()
-                                                                ? "pointer"
-                                                                : "not-allowed",
                                                     }}
                                                 >
-                                                    {updatingKey === `cancel-${b.id}` ? "Cancelling..." : "Confirm cancel"}
+                                                    {busySaving ? "Saving..." : "Save"}
                                                 </button>
                                             </div>
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        </div>
-                    )}
-
-                    {busyModalOpen ? (
-                        <div
-                            style={{
-                                position: "fixed",
-                                inset: 0,
-                                background: "rgba(0,0,0,0.25)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                padding: 16,
-                                zIndex: 9999,
-                            }}
-                            onClick={() => !busySaving && setBusyModalOpen(false)}
-                        >
-                            <div
-                                style={{
-                                    width: "100%",
-                                    maxWidth: 520,
-                                    background: "#fff",
-                                    borderRadius: 18,
-                                    border: "1px solid #eee",
-                                    padding: 16,
-                                    boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                                    <div style={{ fontWeight: 950, fontSize: 16 }}>
-                                        {busyModalMode === "create" ? "Add busy block" : "Edit busy block"}
-                                    </div>
-
-                                    <button type="button" style={ghostBtnStyle} disabled={busySaving} onClick={() => setBusyModalOpen(false)}>
-                                        Close
-                                    </button>
-                                </div>
-
-                                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                                        <div>
-                                            <div style={{ fontSize: 12, color: "#666", fontWeight: 800, marginBottom: 6 }}>Date</div>
-                                            <input
-                                                type="date"
-                                                value={busyDraft.date}
-                                                onChange={(e) => setBusyDraft((p) => ({ ...p, date: e.target.value }))}
-                                                style={inputStyle}
-                                                disabled={busySaving}
-                                            />
                                         </div>
-
-                                        <div>
-                                            <div style={{ fontSize: 12, color: "#666", fontWeight: 800, marginBottom: 6 }}>Note</div>
-                                            <input
-                                                type="text"
-                                                placeholder="Optional note (e.g., School pickup)"
-                                                value={busyDraft.note}
-                                                onChange={(e) => setBusyDraft((p) => ({ ...p, note: e.target.value }))}
-                                                style={inputStyle}
-                                                disabled={busySaving}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                                        <div>
-                                            <div style={{ fontSize: 12, color: "#666", fontWeight: 800, marginBottom: 6 }}>Start</div>
-                                            <input
-                                                type="time"
-                                                value={busyDraft.start_time}
-                                                onChange={(e) => setBusyDraft((p) => ({ ...p, start_time: e.target.value }))}
-                                                style={inputStyle}
-                                                disabled={busySaving}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <div style={{ fontSize: 12, color: "#666", fontWeight: 800, marginBottom: 6 }}>End</div>
-                                            <input
-                                                type="time"
-                                                value={busyDraft.end_time}
-                                                onChange={(e) => setBusyDraft((p) => ({ ...p, end_time: e.target.value }))}
-                                                style={inputStyle}
-                                                disabled={busySaving}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 6 }}>
-                                        {busyModalMode === "edit" ? (
-                                            <button
-                                                type="button"
-                                                onClick={deleteBusyBlock}
-                                                disabled={busySaving}
-                                                style={{
-                                                    padding: "10px 12px",
-                                                    borderRadius: 12,
-                                                    border: "1px solid #eee",
-                                                    background: "#fff",
-                                                    fontWeight: 900,
-                                                    color: "#b00020",
-                                                }}
-                                            >
-                                                Delete
-                                            </button>
-                                        ) : (
-                                            <div />
-                                        )}
-
-                                        <button
-                                            type="button"
-                                            onClick={saveBusyBlock}
-                                            disabled={busySaving}
-                                            style={{
-                                                padding: "10px 12px",
-                                                borderRadius: 12,
-                                                border: "1px solid #111",
-                                                background: "#111",
-                                                color: "#fff",
-                                                fontWeight: 900,
-                                            }}
-                                        >
-                                            {busySaving ? "Saving..." : "Save"}
-                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    ) : null}
+                            ) : null}
 
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 
 }
