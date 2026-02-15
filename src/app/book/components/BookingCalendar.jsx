@@ -33,8 +33,14 @@ export default function BookingCalendar({
     onHoverRange,
 
     selectedSlot = null,
+
+    // Length of a lesson in minutes (30..240 etc)
+    lessonMinutes = 60,
 }) {
     const isLoading = loadingWeek;
+
+    const sliceMinutes = 15;
+    const sliceOffsets = [0, 15, 30, 45];
 
     // Internal hover preview state (keeps BookPage cleaner)
     const [hoverPreview, setHoverPreview] = useState(null); // { date, start, end }
@@ -82,7 +88,7 @@ export default function BookingCalendar({
         const be = timeToMinutes(String(booking.end_time).slice(0, 5));
 
         const isStartSlice = minute === bs;
-        const isEndSlice = minute + 30 === be;
+        const isEndSlice = minute + sliceMinutes === be;
 
         const thick = "2px solid #000";
 
@@ -109,7 +115,7 @@ export default function BookingCalendar({
 
         const thick = "2px solid #000";
         const isTopHalf = hoverPreview && hoverPreview.date === isoDate && minute === hoverPreview.start;
-        const isBottomHalf = hoverPreview && hoverPreview.date === isoDate && minute + 30 === hoverPreview.end;
+        const isBottomHalf = hoverPreview && hoverPreview.date === isoDate && minute + sliceMinutes === hoverPreview.end;
 
         return {
             borderLeft: thick,
@@ -163,27 +169,196 @@ export default function BookingCalendar({
                         </div>
 
                         {weekDays.map((d) => {
-                            const start00 = h * 60;
-                            const start30 = start00 + 30;
+                            // const start00 = h * 60;
+                            // const start30 = start00 + 30;
+
+                            // const daySlots = slotsByDate[d.iso] || [];
+                            // const isAvailable00 = daySlots.some((s) => s.start === start00);
+                            // const isAvailable30 = daySlots.some((s) => s.start === start30);
+
+                            // const canBook00 = isAvailable00 && !!selectedStudentId;
+                            // const canBook30 = isAvailable30 && !!selectedStudentId;
+
+                            // const dayBookings = bookingsByDate[d.iso] || [];
+                            // const otherDayBookings = otherBookingsByDate[d.iso] || [];
+
+                            // const myBooking00 = findOverlapAtMinute(dayBookings, start00);
+                            // const myBooking30 = findOverlapAtMinute(dayBookings, start30);
+
+                            // const otherBooking00 = findOverlapAtMinute(otherDayBookings, start00);
+                            // const otherBooking30 = findOverlapAtMinute(otherDayBookings, start30);
+
+                            // const finalCanBook00 = canBook00 && !myBooking00 && !otherBooking00;
+                            // const finalCanBook30 = canBook30 && !myBooking30 && !otherBooking30;
+
+                            // const overlapsRange = (list, startMinute, endMinute) => {
+                            //     const items = list || [];
+                            //     for (const b of items) {
+                            //         const bs = timeToMinutes(String(b.start_time).slice(0, 5));
+                            //         const be = timeToMinutes(String(b.end_time).slice(0, 5));
+                            //         if (bs == null || be == null) continue;
+                            //         if (startMinute < be && endMinute > bs) return true;
+                            //     }
+                            //     return false;
+                            // };
+
+                            // const rangeEnd00 = start00 + lessonMinutes;
+                            // const rangeEnd30 = start30 + lessonMinutes;
+
+                            // const rangeBlocked00 =
+                            //     overlapsRange(dayBookings, start00, rangeEnd00) ||
+                            //     overlapsRange(otherDayBookings, start00, rangeEnd00);
+
+                            // const rangeBlocked30 =
+                            //     overlapsRange(dayBookings, start30, rangeEnd30) ||
+                            //     overlapsRange(otherDayBookings, start30, rangeEnd30);
+
+                            // const finalCanBook00Safe = finalCanBook00 && !rangeBlocked00;
+                            // const finalCanBook30Safe = finalCanBook30 && !rangeBlocked30;
+
+                            // const cellTitle = (minute, myB, otherB, canBook) => {
+                            //     if (loadingWeek) return "Loading availability...";
+                            //     if (myB) return `Your booking (${String(myB.status || "").toLowerCase()})`;
+                            //     if (otherB) return "Booked";
+                            //     if (canBook) return `Click to book ${d.iso} ${minutesToTime(minute)}`;
+                            //     return "Unavailable";
+                            // };
+
+                            // const renderCellLabel = (isAvailable, myB, otherB) => {
+                            //     const label = getCellLabel({ isAvailable, myBooking: myB, otherBooking: otherB });
+                            //     if (!label) return null;
+                            //     return (
+                            //         <span
+                            //             style={{
+                            //                 fontSize: 9,
+                            //                 fontWeight: 900,
+                            //                 letterSpacing: 0.2,
+                            //                 opacity: label === "–" ? 0.5 : 0.9,
+                            //                 userSelect: "none",
+                            //                 padding: "0 4px",
+                            //                 textAlign: "center",
+                            //                 lineHeight: 1.1,
+                            //                 whiteSpace: "normal",
+                            //             }}
+                            //         >
+                            //             {label}
+                            //         </span>
+                            //     );
+                            // };
+
+                            // return (
+                            //     <div key={`${d.iso}-${h}-${row}`} style={{ borderLeft: "1px solid #eee", borderTop: "1px solid #eee", padding: 0 }}>
+                            //         {/* 00 block */}
+                            //         <div
+                            //             onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
+                            //             onMouseEnter={() => {
+                            //                 if (loadingWeek) return;
+
+                            //                 onHoverRange?.({ date: d.iso, start: start00, end: start00 + lessonMinutes });
+
+                            //                 if (!finalCanBook00Safe) return;
+                            //                 setHoverPreview({ date: d.iso, start: start00, end: start00 + lessonMinutes });
+                            //             }}
+                            //             onMouseLeave={() => {
+                            //                 onHoverRange?.(null);
+                            //                 setHoverPreview(null);
+                            //             }}
+                            //             onClick={() => {
+                            //                 if (!finalCanBook00Safe) return;
+                            //                 if (loadingWeek) return;
+
+                            //                 onCellClick?.({ date: d.iso, start: start00, end: start00 + lessonMinutes });
+
+                            //             }}
+                            //             style={{
+                            //                 height: 22,
+                            //                 cursor: isLoading ? "wait" : canBook00 ? "pointer" : "not-allowed",
+                            //                 display: "flex",
+                            //                 alignItems: "center",
+                            //                 justifyContent: "center",
+
+                            //                 // If both halves are inside the 60-min preview, remove divider
+                            //                 borderBottom: isInPreview(d.iso, start00) && isInPreview(d.iso, start30) ? "none" : "1px dashed #f0f0f0",
+
+                            //                 background: isLoading ? "#fff" : isAvailable00 ? "#fff" : "#f5f5f5",
+                            //                 color: isLoading ? "#999" : isAvailable00 ? "#000" : "#999",
+                            //                 opacity: isLoading ? 0.6 : 1,
+
+                            //                 // One continuous outline for real bookings
+                            //                 ...getBookingBoxBorders(myBooking00 || otherBooking00, start00),
+
+                            //                 // Hover preview outline
+                            //                 ...slotOutlineStyle(d.iso, start00),
+
+                            //                 ...selectedStyle(d.iso, start00),
+                            //             }}
+                            //             title={cellTitle(start00, myBooking00, otherBooking00, finalCanBook00)}
+                            //         >
+                            //             {renderCellLabel(isAvailable00, myBooking00, otherBooking00)}
+                            //         </div>
+
+                            //         {/* 30 block */}
+                            //         <div
+                            //             onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
+                            //             onMouseEnter={() => {
+                            //                 if (loadingWeek) return;
+
+                            //                 onHoverRange?.({ date: d.iso, start: start30, end: start30 + lessonMinutes });
+
+                            //                 if (!finalCanBook30Safe) return;
+                            //                 setHoverPreview({ date: d.iso, start: start30, end: start30 + lessonMinutes });
+                            //             }}
+                            //             onMouseLeave={() => {
+                            //                 onHoverRange?.(null);
+                            //                 setHoverPreview(null);
+                            //             }}
+                            //             onClick={() => {
+                            //                 if (!finalCanBook30Safe) return;
+                            //                 if (loadingWeek) return;
+
+                            //                 onCellClick?.({ date: d.iso, start: start30, end: start30 + lessonMinutes });
+
+                            //             }}
+                            //             style={{
+                            //                 height: 22,
+                            //                 cursor: isLoading ? "wait" : canBook30 ? "pointer" : "not-allowed",
+                            //                 display: "flex",
+                            //                 alignItems: "center",
+                            //                 justifyContent: "center",
+                            //                 background: isLoading ? "#fff" : isAvailable30 ? "#fff" : "#f5f5f5",
+                            //                 color: isLoading ? "#999" : isAvailable30 ? "#000" : "#999",
+
+                            //                 // One continuous outline for real bookings
+                            //                 ...getBookingBoxBorders(myBooking30 || otherBooking30, start30),
+
+                            //                 // Hover preview outline
+                            //                 ...slotOutlineStyle(d.iso, start30),
+
+                            //                 ...selectedStyle(d.iso, start30),
+                            //             }}
+                            //             title={cellTitle(start30, myBooking30, otherBooking30, finalCanBook30)}
+                            //         >
+                            //             {renderCellLabel(isAvailable30, myBooking30, otherBooking30)}
+                            //         </div>
+                            //     </div>
+                            // );
+
+                            const hourStart = h * 60;
 
                             const daySlots = slotsByDate[d.iso] || [];
-                            const isAvailable00 = daySlots.some((s) => s.start === start00);
-                            const isAvailable30 = daySlots.some((s) => s.start === start30);
-
-                            const canBook00 = isAvailable00 && !!selectedStudentId;
-                            const canBook30 = isAvailable30 && !!selectedStudentId;
-
                             const dayBookings = bookingsByDate[d.iso] || [];
                             const otherDayBookings = otherBookingsByDate[d.iso] || [];
 
-                            const myBooking00 = findOverlapAtMinute(dayBookings, start00);
-                            const myBooking30 = findOverlapAtMinute(dayBookings, start30);
-
-                            const otherBooking00 = findOverlapAtMinute(otherDayBookings, start00);
-                            const otherBooking30 = findOverlapAtMinute(otherDayBookings, start30);
-
-                            const finalCanBook00 = canBook00 && !myBooking00 && !otherBooking00;
-                            const finalCanBook30 = canBook30 && !myBooking30 && !otherBooking30;
+                            const overlapsRange = (list, startMinute, endMinute) => {
+                                const items = list || [];
+                                for (const b of items) {
+                                    const bs = timeToMinutes(String(b.start_time).slice(0, 5));
+                                    const be = timeToMinutes(String(b.end_time).slice(0, 5));
+                                    if (bs == null || be == null) continue;
+                                    if (startMinute < be && endMinute > bs) return true;
+                                }
+                                return false;
+                            };
 
                             const cellTitle = (minute, myB, otherB, canBook) => {
                                 if (loadingWeek) return "Loading availability...";
@@ -217,96 +392,78 @@ export default function BookingCalendar({
 
                             return (
                                 <div key={`${d.iso}-${h}-${row}`} style={{ borderLeft: "1px solid #eee", borderTop: "1px solid #eee", padding: 0 }}>
-                                    {/* 00 block */}
-                                    <div
-                                        onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
-                                        onMouseEnter={() => {
-                                            if (loadingWeek) return;
+                                    {sliceOffsets.map((off) => {
+                                        const minute = hourStart + off;
+                                        const nextMinute = minute + sliceMinutes;
 
-                                            onHoverRange?.({ date: d.iso, start: start00, end: start00 + 60 });
+                                        const isAvailable = daySlots.some((s) => s.start === minute);
+                                        const canBook = isAvailable && !!selectedStudentId;
 
-                                            if (!finalCanBook00) return;
-                                            setHoverPreview({ date: d.iso, start: start00, end: start00 + 60 });
-                                        }}
-                                        onMouseLeave={() => {
-                                            onHoverRange?.(null);
-                                            setHoverPreview(null);
-                                        }}
-                                        onClick={() => {
-                                            if (!finalCanBook00) return;
-                                            if (loadingWeek) return;
+                                        const myBooking = findOverlapAtMinute(dayBookings, minute);
+                                        const otherBooking = findOverlapAtMinute(otherDayBookings, minute);
 
-                                            onCellClick?.({ date: d.iso, start: start00 });
-                                        }}
-                                        style={{
-                                            height: 22,
-                                            cursor: isLoading ? "wait" : canBook00 ? "pointer" : "not-allowed",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
+                                        const finalCanBook = canBook && !myBooking && !otherBooking;
 
-                                            // If both halves are inside the 60-min preview, remove divider
-                                            borderBottom: isInPreview(d.iso, start00) && isInPreview(d.iso, start30) ? "none" : "1px dashed #f0f0f0",
+                                        const rangeEnd = minute + lessonMinutes;
 
-                                            background: isLoading ? "#fff" : isAvailable00 ? "#fff" : "#f5f5f5",
-                                            color: isLoading ? "#999" : isAvailable00 ? "#000" : "#999",
-                                            opacity: isLoading ? 0.6 : 1,
+                                        const rangeBlocked =
+                                            overlapsRange(dayBookings, minute, rangeEnd) ||
+                                            overlapsRange(otherDayBookings, minute, rangeEnd);
 
-                                            // One continuous outline for real bookings
-                                            ...getBookingBoxBorders(myBooking00 || otherBooking00, start00),
+                                        const finalCanBookSafe = finalCanBook && !rangeBlocked;
 
-                                            // Hover preview outline
-                                            ...slotOutlineStyle(d.iso, start00),
+                                        const divider =
+                                            isInPreview(d.iso, minute) && isInPreview(d.iso, nextMinute) ? "none" : "1px dashed #f0f0f0";
 
-                                            ...selectedStyle(d.iso, start00),
-                                        }}
-                                        title={cellTitle(start00, myBooking00, otherBooking00, finalCanBook00)}
-                                    >
-                                        {renderCellLabel(isAvailable00, myBooking00, otherBooking00)}
-                                    </div>
+                                        return (
+                                            <div
+                                                key={`${d.iso}-${h}-${off}`}
+                                                onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
+                                                onMouseEnter={() => {
+                                                    if (loadingWeek) return;
 
-                                    {/* 30 block */}
-                                    <div
-                                        onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
-                                        onMouseEnter={() => {
-                                            if (loadingWeek) return;
+                                                    onHoverRange?.({ date: d.iso, start: minute, end: minute + lessonMinutes });
 
-                                            onHoverRange?.({ date: d.iso, start: start30, end: start30 + 60 });
+                                                    if (!finalCanBookSafe) return;
+                                                    setHoverPreview({ date: d.iso, start: minute, end: minute + lessonMinutes });
+                                                }}
+                                                onMouseLeave={() => {
+                                                    onHoverRange?.(null);
+                                                    setHoverPreview(null);
+                                                }}
+                                                onClick={() => {
+                                                    if (!finalCanBookSafe) return;
+                                                    if (loadingWeek) return;
 
-                                            if (!finalCanBook30) return;
-                                            setHoverPreview({ date: d.iso, start: start30, end: start30 + 60 });
-                                        }}
-                                        onMouseLeave={() => {
-                                            onHoverRange?.(null);
-                                            setHoverPreview(null);
-                                        }}
-                                        onClick={() => {
-                                            if (!finalCanBook30) return;
-                                            if (loadingWeek) return;
+                                                    onCellClick?.({ date: d.iso, start: minute, end: minute + lessonMinutes });
+                                                }}
+                                                style={{
+                                                    height: 15,
+                                                    cursor: isLoading ? "wait" : canBook ? "pointer" : "not-allowed",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    borderBottom: off === 45 ? "none" : divider,
 
-                                            onCellClick?.({ date: d.iso, start: start30 });
-                                        }}
-                                        style={{
-                                            height: 22,
-                                            cursor: isLoading ? "wait" : canBook30 ? "pointer" : "not-allowed",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            background: isLoading ? "#fff" : isAvailable30 ? "#fff" : "#f5f5f5",
-                                            color: isLoading ? "#999" : isAvailable30 ? "#000" : "#999",
+                                                    background: isLoading ? "#fff" : isAvailable ? "#fff" : "#f5f5f5",
+                                                    color: isLoading ? "#999" : isAvailable ? "#000" : "#999",
+                                                    opacity: isLoading ? 0.6 : 1,
 
-                                            // One continuous outline for real bookings
-                                            ...getBookingBoxBorders(myBooking30 || otherBooking30, start30),
+                                                    // Continuous outline for real bookings
+                                                    ...getBookingBoxBorders(myBooking || otherBooking, minute),
 
-                                            // Hover preview outline
-                                            ...slotOutlineStyle(d.iso, start30),
+                                                    // Hover preview outline
+                                                    ...slotOutlineStyle(d.iso, minute),
 
-                                            ...selectedStyle(d.iso, start30),
-                                        }}
-                                        title={cellTitle(start30, myBooking30, otherBooking30, finalCanBook30)}
-                                    >
-                                        {renderCellLabel(isAvailable30, myBooking30, otherBooking30)}
-                                    </div>
+                                                    // Selected slot background
+                                                    ...selectedStyle(d.iso, minute),
+                                                }}
+                                                title={cellTitle(minute, myBooking, otherBooking, finalCanBook)}
+                                            >
+                                                {renderCellLabel(isAvailable, myBooking, otherBooking)}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             );
                         })}

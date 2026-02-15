@@ -1,34 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
-export default function BlockingLoader({ show, text = "Loading..." }) {
+/**
+ * ProgressBarOverlay
+ * - Blocks interaction while async work happens.
+ * - Shows a top progress bar that advances over time (pseudo-progress).
+ */
+export default function ProgressBarOverlay({ active = false, label = "Loading…" }) {
     const [pct, setPct] = useState(0);
 
     useEffect(() => {
-        if (!show) {
+        if (!active) {
             setPct(0);
             return;
         }
 
-        // Start at a visible progress amount
         setPct(12);
 
         const id = setInterval(() => {
             setPct((p) => {
-                if (p >= 92) return p; // cap until work finishes
+                if (p >= 92) return p;
                 const step = p < 60 ? 6 : p < 80 ? 3 : 1;
                 return Math.min(92, p + step);
             });
         }, 450);
 
         return () => clearInterval(id);
-    }, [show]);
+    }, [active]);
 
-    if (!show) return null;
+    if (!active) return null;
 
     return (
         <div
+            aria-live="polite"
+            aria-busy="true"
             style={{
                 position: "fixed",
                 inset: 0,
@@ -40,7 +46,6 @@ export default function BlockingLoader({ show, text = "Loading..." }) {
                 justifyContent: "center",
                 paddingTop: 14,
             }}
-            onClick={(e) => e.stopPropagation()}
         >
             <div style={{ width: "min(920px, 96vw)" }}>
                 <div
@@ -72,7 +77,7 @@ export default function BlockingLoader({ show, text = "Loading..." }) {
                         justifyContent: "space-between",
                     }}
                 >
-                    <span>{text}</span>
+                    <span>{label}</span>
                     <span style={{ opacity: 0.75 }}>{pct}%</span>
                 </div>
             </div>
