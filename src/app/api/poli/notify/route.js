@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendEmail, templates } from '@/lib/email';
+import { sendEmail, templates } from '../../../../lib/email';
 
 export async function POST(request) {
     const { searchParams } = new URL(request.url);
