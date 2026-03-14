@@ -106,20 +106,32 @@ export default function SignInPage() {
         setLoading(true);
         setMessage("");
 
-        const { error } = await supabase.auth.signInWithOAuth({
+        // 🚀 THE STRATEGY: 
+        // By default, ask for NO extra scopes. This keeps it "Clean" for Parents.
+        let authOptions = {
             provider: "google",
             options: {
-                // 🚀 ADD THESE BACK: This is the "Passport" that lets you see Google Events
-                scopes: 'https://www.googleapis.com/auth/calendar.readonly',
                 redirectTo: typeof window !== "undefined"
                     ? `${window.location.origin}/auth/callback`
                     : undefined,
-                queryParams: {
-                    access_type: 'offline',
-                    prompt: 'consent', // This forces Google to show the "Allow Calendar" checkboxes
-                },
             },
-        });
+        };
+
+        // 🚀 THE UPGRADE: 
+        // Only if YOU (the tutor) are logging in to sync the calendar, 
+        // we add the scary scopes. You can trigger this by checking the URL 
+        // or just manually adding a "Tutor Login" button.
+        const isTutorLogin = window.location.pathname.includes('tutor');
+
+        if (isTutorLogin) {
+            authOptions.options.scopes = 'https://www.googleapis.com/auth/calendar.readonly';
+            authOptions.options.queryParams = {
+                access_type: 'offline',
+                prompt: 'consent',
+            };
+        }
+
+        const { error } = await supabase.auth.signInWithOAuth(authOptions);
 
         if (error) {
             setMessage(error.message);
