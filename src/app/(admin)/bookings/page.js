@@ -13,7 +13,7 @@ export default function AdminBookingsPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
-    // 🚀 NEW: Tracks if we are editing an existing booking
+    // Tracks if we are editing an existing booking
     const [editingId, setEditingId] = useState(null);
 
     const [selectedTutor, setSelectedTutor] = useState('');
@@ -25,7 +25,10 @@ export default function AdminBookingsPage() {
     const [amount, setAmount] = useState('');
     const [mode, setMode] = useState('online');
     const [paymentStatus, setPaymentStatus] = useState('paid');
-    const [bookingStatus, setBookingStatus] = useState('accepted'); // NEW: Let admin change status
+    const [bookingStatus, setBookingStatus] = useState('accepted');
+
+    // 🚀 TAB STATE
+    const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming', 'past', 'all'
 
     useEffect(() => {
         loadDashboard();
@@ -49,7 +52,6 @@ export default function AdminBookingsPage() {
         setLoading(false);
     }
 
-    // 🚀 NEW: Opens modal blank for creating
     const openCreateModal = () => {
         setEditingId(null);
         setSelectedTutor('');
@@ -65,14 +67,13 @@ export default function AdminBookingsPage() {
         setIsModalOpen(true);
     };
 
-    // 🚀 NEW: Opens modal pre-filled for editing
     const openEditModal = (b) => {
         setEditingId(b.id);
         setSelectedTutor(b.tutor_id || '');
         setSelectedStudent(b.student_id || '');
         setSubject(b.subject || '');
         setDate(b.session_date || '');
-        setTime(b.start_time ? b.start_time.slice(0, 5) : ''); // Format HH:MM:SS to HH:MM
+        setTime(b.start_time ? b.start_time.slice(0, 5) : '');
         setDuration(b.duration || 60);
         setAmount(b.amount_total || '');
         setMode(b.lesson_mode || 'online');
@@ -81,15 +82,13 @@ export default function AdminBookingsPage() {
         setIsModalOpen(true);
     };
 
-    // 🚀 NEW: Delete function with confirmation
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to permanently delete this booking?")) return;
-
         const result = await deleteBookingAsAdmin(id);
         if (!result.success) {
             alert("Failed to delete: " + result.error);
         } else {
-            loadDashboard(); // Refresh list
+            loadDashboard();
         }
     };
 
@@ -162,10 +161,18 @@ export default function AdminBookingsPage() {
 
     const formatCurrency = (val) => new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(val);
 
+    // 🚀 FILTERING LOGIC
+    const today = new Date().toISOString().split('T')[0];
+    const filteredBookings = bookings.filter(b => {
+        if (activeTab === 'upcoming') return b.session_date >= today;
+        if (activeTab === 'past') return b.session_date < today;
+        return true; // 'all'
+    });
+
     if (loading) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Loading Secure Database...</div>;
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 p-4 md:p-8">
+        <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 p-4 md:p-8 pb-32">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-black text-gray-900 tracking-tight">Master Bookings</h1>
@@ -180,15 +187,37 @@ export default function AdminBookingsPage() {
             </div>
 
             <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-8 py-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-                    <h2 className="font-black text-gray-900">All Records</h2>
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{bookings.length} Total</span>
+                {/* 🚀 TAB SWITCHER HEADER */}
+                <div className="px-8 pt-8 border-b border-gray-50 bg-gray-50/50">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="font-black text-gray-900 text-xl">Platform Records</h2>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-100 px-3 py-1 rounded-full">
+                            {filteredBookings.length} {activeTab}
+                        </span>
+                    </div>
+
+                    <div className="flex gap-8">
+                        {['upcoming', 'past', 'all'].map((tab) => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`pb-4 text-sm font-bold capitalize transition-all relative ${activeTab === tab ? 'text-[#24985b]' : 'text-gray-400 hover:text-gray-600'
+                                    }`}
+                            >
+                                {tab}
+                                {activeTab === tab && (
+                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#24985b] rounded-t-full animate-in fade-in slide-in-from-bottom-1" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
                 </div>
+
                 <div className="divide-y divide-gray-50">
-                    {bookings.length === 0 ? (
-                        <div className="p-16 text-center text-gray-400 font-medium">No bookings found in the database.</div>
+                    {filteredBookings.length === 0 ? (
+                        <div className="p-20 text-center text-gray-400 font-medium italic">No {activeTab} bookings found.</div>
                     ) : (
-                        bookings.map(b => (
+                        filteredBookings.map(b => (
                             <div key={b.id} className="p-6 md:p-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4 hover:bg-gray-50/50 transition-colors group">
                                 <div>
                                     <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2 mb-2">
@@ -211,7 +240,6 @@ export default function AdminBookingsPage() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-8 text-right mt-4 md:mt-0">
-                                    {/* 🚀 NEW: Edit & Delete Action Buttons (Visible on hover on desktop) */}
                                     <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={() => openEditModal(b)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Edit Booking">
                                             <EditIcon />
@@ -232,7 +260,7 @@ export default function AdminBookingsPage() {
                 </div>
             </div>
 
-            {/* Manual Booking / Edit Modal */}
+            {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in overflow-y-auto" onClick={() => setIsModalOpen(false)}>
                     <div className="bg-white rounded-[2.5rem] w-full max-w-2xl shadow-2xl animate-in zoom-in-95 my-auto" onClick={e => e.stopPropagation()}>
@@ -284,7 +312,6 @@ export default function AdminBookingsPage() {
                                     )}
                                 </div>
                                 <div>
-                                    {/* 🚀 NEW: Let admin change the Booking Status directly */}
                                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Booking Status</label>
                                     <select value={bookingStatus} onChange={e => setBookingStatus(e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl font-bold text-gray-900 outline-none focus:border-black transition-all">
                                         <option value="requested">Requested</option>
@@ -351,6 +378,7 @@ export default function AdminBookingsPage() {
     );
 }
 
+// Icon components remain the same
 function PlusIcon() { return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>; }
 function CloseIcon() { return <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>; }
 function UserIcon({ className = "w-4 h-4" }) { return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>; }
