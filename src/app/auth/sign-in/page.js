@@ -109,12 +109,15 @@ export default function SignInPage() {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
-                redirectTo:
-                    typeof window !== "undefined"
-                        ? `${window.location.origin}/auth/callback`
-                        : undefined,
-                // 🚀 THE FIX: Removed the calendar 'scopes' and 'queryParams'.
-                // Now this just asks for basic Name and Email, bypassing the warning screen!
+                // 🚀 ADD THESE BACK: This is the "Passport" that lets you see Google Events
+                scopes: 'https://www.googleapis.com/auth/calendar.readonly',
+                redirectTo: typeof window !== "undefined"
+                    ? `${window.location.origin}/auth/callback`
+                    : undefined,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent', // This forces Google to show the "Allow Calendar" checkboxes
+                },
             },
         });
 
