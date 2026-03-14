@@ -94,10 +94,9 @@ export default function SignInPage() {
 
         const role = profile.role;
 
-        if (role === "parent") router.push("/parent/dashboard");
-        else if (role === "student") router.push("/student/dashboard");
-        else if (role === "tutor") router.push("/tutor/dashboard");
-        else if (role === "admin") router.push("/admin/dashboard");
+        if (role === "parent") router.push("/parent-dashboard");
+        else if (role === "tutor") router.push("/tutor-dashboard");
+        else if (role === "admin") router.push("/admin-dashboard");
         else setMessage("Signed in, but role is unknown.");
 
         setLoading(false);
@@ -114,6 +113,8 @@ export default function SignInPage() {
                     typeof window !== "undefined"
                         ? `${window.location.origin}/auth/callback`
                         : undefined,
+                // 🚀 THE FIX: Removed the calendar 'scopes' and 'queryParams'.
+                // Now this just asks for basic Name and Email, bypassing the warning screen!
             },
         });
 
@@ -126,13 +127,13 @@ export default function SignInPage() {
     return (
         <main
             style={{
-                minHeight: "calc(100vh - 72px)",
+                minHeight: "100vh",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 padding: 18,
                 background:
-                    "radial-gradient(1200px 600px at 20% 0%, #eef5ff 0%, transparent 60%), radial-gradient(900px 500px at 90% 10%, #f5f7ff 0%, transparent 55%), #ffffff",
+                    "radial-gradient(1200px 600px at 50% 0%, #d9b9fc 0%, transparent 90%), radial-gradient(1000px 600px at 50% 100%, #9cfbbd 0%, transparent 90%), #ffffff",
             }}
         >
             <div style={{ width: "100%", maxWidth: 460 }}>
@@ -253,8 +254,8 @@ export default function SignInPage() {
                                         width: "100%",
                                         padding: "12px 12px",
                                         borderRadius: 12,
-                                        border: "1px solid #0b3d91",
-                                        background: "#0b3d91",
+                                        border: "1px solid #5b0b91",
+                                        background: "#5b0b91",
                                         color: "#fff",
                                         cursor: loading ? "not-allowed" : "pointer",
                                         fontWeight: 900,
@@ -299,7 +300,7 @@ export default function SignInPage() {
                     >
                         <div style={{ fontSize: 13, color: "#555" }}>
                             New here?{" "}
-                            <a href="/auth/sign-up" style={{ fontWeight: 900, color: "#0b3d91", textDecoration: "none" }}>
+                            <a href="/auth/sign-up" style={{ fontWeight: 900, color: "#600b91", textDecoration: "none" }}>
                                 Create an account
                             </a>
                         </div>
@@ -313,3 +314,4 @@ export default function SignInPage() {
         </main>
     );
 }
+

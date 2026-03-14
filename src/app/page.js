@@ -1,533 +1,196 @@
-import Link from "next/link";
-import { SpeedInsights } from "@vercel/speed-insights/next"
+'use client';
+import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
-const BRAND_BLUE = "#0b3d91";
+export default function LandingPage() {
+    const [session, setSession] = useState(null);
+    const [dashboardUrl, setDashboardUrl] = useState('/parent-dashboard');
 
-const benefits = [
-  { title: "Stronger foundations", text: "Gaps closed fast with clear explanations, not confusion." },
-  { title: "Confidence under pressure", text: "Students learn a method, then practise until it sticks." },
-  { title: "Better grades (NCEA + NZ Curriculum)", text: "Structured support for tests, internals, and exams." },
-  { title: "Parent-friendly communication", text: "Clear expectations, clear bookings, clear updates." },
-];
-
-const howItWorks = [
-  { step: "1", title: "Create an account", text: "Add your child once and you’re ready to book anytime." },
-  { step: "2", title: "Pick a time", text: "See availability instantly and book in seconds." },
-  { step: "3", title: "Turn up and learn", text: "Focused tutoring, lots of practice, and calm progress." },
-];
-
-const topics = [
-  "Years 4-10 maths foundations",
-  "Algebra, fractions, ratios, geometry",
-  "NCEA Level 1-3 exam preparation",
-  "Problem-solving and word problems",
-  "Confidence-building and learning routines",
-];
-
-const testimonials = [
-  {
-    name: "Parent (Year 11 NCEA Level 1)",
-    text:
-      "Darsha is a friendly approachable tutor that has helped my daughter through Year 11 maths.  She has been great at finding differing ways to explain maths to a kid that has never found it easy. My daughter's confidence has grown with her support. She is always reliable, great at communicating and tutors for a reasonable rate.  I would highly recommend her! ",
-  },
-  {
-    name: "Parent (Year 9)",
-    text:
-      "Our child has really enjoyed maths sessions with Darsha and has learnt so much.  We have also noticed that our child has a far more positive and confident attitude to maths. Darsha has been very accommodating when we've needed an extra study session before a test, or when we've had to change times.  It's also fabulous having Darsha come to our house, saving us another drop off and pick up to do in our busy household.  We have used a tutoring company in the past, and prefer the one-on-one sessions with Darsha.",
-  },
-  {
-    name: "Parent (Year 7)",
-    text:
-      "The booking system is super easy and the tutoring is even better. Clear explanations and no fluff.",
-  },
-];
-
-const photos = [
-  // Stock photos (safe to use as <img> without Next image config)
-  // You can replace these later with your own photos in /public (recommended).
-  "https://epe.brightspotcdn.com/ce/1b/4dbafb4c44e0921e72cd7c242b01/teacher-tutor-student-022023-187244393.jpg",
-  "https://todaysparent.mblycdn.com/uploads/tp/2011/09/Tutoring.jpg",
-  "https://cdn-blog.superprof.com/blog_nz/wp-content/uploads/2025/07/shutterstock_115176088-17522933221418-4175.jpg",
-];
-
-function SectionTitle({ kicker, title, subtitle }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      {kicker ? (
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid #e6e6e6",
-            background: "#fafafa",
-            fontWeight: 900,
-            fontSize: 12,
-            color: "#333",
-          }}
-        >
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: BRAND_BLUE }} />
-          {kicker}
-        </div>
-      ) : null}
-
-      <h2 style={{ margin: "10px 0 6px", fontSize: 26, lineHeight: 1.2, letterSpacing: -0.2 }}>
-        {title}
-      </h2>
-
-      {subtitle ? (
-        <p style={{ margin: 0, color: "#555", lineHeight: 1.55, fontSize: 15 }}>{subtitle}</p>
-      ) : null}
-    </div>
-  );
-}
-
-export default function Home() {
-  return (
-    <main
-      style={{
-        minHeight: "calc(100vh - 72px)",
-        padding: "26px 14px 70px",
-        background:
-          "radial-gradient(1200px 600px at 20% 0%, #eef5ff 0%, transparent 60%), radial-gradient(900px 500px at 90% 10%, #f5f7ff 0%, transparent 55%), #ffffff",
-      }}
-    >
-      <div style={{ maxWidth: 1040, margin: "0 auto", display: "grid", gap: 18 }}>
-        {/* HERO */}
-        <section
-          style={{
-            border: "1px solid #eee",
-            borderRadius: 18,
-            background: "#fff",
-            boxShadow: "0 12px 34px rgba(15, 23, 42, 0.08)",
-            padding: 18,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gap: 16,
-              gridTemplateColumns: "1.2fr 0.8fr",
-              alignItems: "center",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: "1px solid #e6e6e6",
-                  background: "#fafafa",
-                  fontWeight: 900,
-                  fontSize: 12,
-                  color: "#333",
-                }}
-              >
-                <span style={{ width: 8, height: 8, borderRadius: 999, background: BRAND_BLUE }} />
-                Auckland tutoring - maths support
-              </div>
-
-              <h1 style={{ margin: "12px 0 10px", fontSize: 38, lineHeight: 1.08, letterSpacing: -0.4 }}>
-                DarshaTutor
-              </h1>
-
-              <p style={{ margin: 0, color: "#555", fontSize: 16, lineHeight: 1.6, maxWidth: 560 }}>
-                Private tutoring that focuses on results and confidence. Clear explanations, lots of practice,
-                and a booking system that’s genuinely simple.
-              </p>
-
-              <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <Link
-                  href="/auth/sign-up"
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: `1px solid ${BRAND_BLUE}`,
-                    background: BRAND_BLUE,
-                    color: "#fff",
-                    textDecoration: "none",
-                    fontWeight: 900,
-                  }}
-                >
-                  Get started
-                </Link>
-
-                {/* <Link
-                  href="/book"
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: "1px solid #e6e6e6",
-                    background: "#fff",
-                    color: "#222",
-                    textDecoration: "none",
-                    fontWeight: 900,
-                  }}
-                >
-                  View times / book
-                </Link> */}
-
-                <Link
-                  href="/auth/sign-in"
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: "1px solid transparent",
-                    background: "transparent",
-                    color: BRAND_BLUE,
-                    textDecoration: "none",
-                    fontWeight: 900,
-                  }}
-                >
-                  Sign in
-                </Link>
-              </div>
-
-              <div style={{ marginTop: 12, color: "#666", fontSize: 13, lineHeight: 1.45 }}>
-                Supporting NZ Curriculum (Years 4-10) and NCEA Levels 1-3. Online and in-person options depending on availability.
-              </div>
-            </div>
-
-            {/* Right card */}
-            <div
-              style={{
-                border: "1px solid #eee",
-                background: "linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%)",
-                borderRadius: 16,
-                padding: 14,
-              }}
-            >
-              <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>What parents usually want</div>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                {benefits.slice(0, 3).map((b) => (
-                  <div
-                    key={b.title}
-                    style={{
-                      border: "1px solid #eaeaea",
-                      borderRadius: 12,
-                      padding: 10,
-                      background: "#fff",
-                    }}
-                  >
-                    <div style={{ fontWeight: 900, marginBottom: 4 }}>{b.title}</div>
-                    <div style={{ color: "#555", fontSize: 13, lineHeight: 1.45 }}>{b.text}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: 10,
-                  borderRadius: 12,
-                  border: "1px dashed #c9d7ff",
-                  background: "#f4f7ff",
-                  color: "#2b3a67",
-                  fontSize: 13,
-                  lineHeight: 1.45,
-                  fontWeight: 700,
-                }}
-              >
-                Book in seconds. See availability instantly. No back-and-forth messages.
-              </div>
-            </div>
-          </div>
-
-          {/* Responsive tweak */}
-          <style>{`
-            @media (max-width: 900px) {
-              .heroGrid { grid-template-columns: 1fr !important; }
+    useEffect(() => {
+        // Check if the user is already logged in
+        async function checkAuth() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setSession(user);
+                // Grab their role to send them to the right dashboard
+                const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+                if (profile?.role === 'admin') setDashboardUrl('/admin-dashboard');
+                else if (profile?.role === 'tutor') setDashboardUrl('/tutor-dashboard');
+                else setDashboardUrl('/parent-dashboard');
             }
-          `}</style>
-        </section>
+        }
+        checkAuth();
+    }, []);
 
-        {/* PHOTO STRIP */}
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 10,
-          }}
-        >
-          {photos.map((src, idx) => (
-            <div
-              key={idx}
-              style={{
-                borderRadius: 16,
-                overflow: "hidden",
-                border: "1px solid #eee",
-                background: "#fff",
-                boxShadow: "0 10px 26px rgba(15, 23, 42, 0.06)",
-                aspectRatio: "16 / 10",
-              }}
-            >
-              <img
-                src={src}
-                alt="Tutoring"
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                loading="lazy"
-              />
-            </div>
-          ))}
-          <style>{`
-            @media (max-width: 900px) {
-              section[style*="repeat(3, 1fr)"] { grid-template-columns: 1fr !important; }
-            }
-          `}</style>
-        </section>
+    return (
+        <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#24985b] selection:text-white">
+            {/* 🚀 NAVBAR */}
+            <nav className="fixed w-full top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+                <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-[#24985b] rounded-lg flex items-center justify-center text-white font-black text-xl">D</div>
+                        <span className="text-xl font-black tracking-tight text-gray-900">DarshaTutor</span>
+                    </div>
 
-        {/* BENEFITS */}
-        <section
-          style={{
-            border: "1px solid #eee",
-            borderRadius: 18,
-            background: "#fff",
-            padding: 18,
-            boxShadow: "0 12px 34px rgba(15, 23, 42, 0.06)",
-          }}
-        >
-          <SectionTitle
-            kicker="What your child gets"
-            title="Tutoring that’s structured, calm, and effective"
-            subtitle="We start by finding the weak points, then build a plan. You’ll see improvement because the student practises the right things, in the right order."
-          />
+                    <div className="hidden md:flex items-center gap-8 font-bold text-sm text-gray-500">
+                        <a href="#how-it-works" className="hover:text-[#24985b] transition-colors">How it works</a>
+                        <a href="#features" className="hover:text-[#24985b] transition-colors">Features</a>
+                    </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-            {benefits.map((b) => (
-              <div
-                key={b.title}
-                style={{
-                  border: "1px solid #eaeaea",
-                  borderRadius: 14,
-                  padding: 12,
-                  background: "#fff",
-                }}
-              >
-                <div style={{ fontWeight: 950, marginBottom: 6 }}>{b.title}</div>
-                <div style={{ color: "#555", fontSize: 14, lineHeight: 1.5 }}>{b.text}</div>
-              </div>
-            ))}
-          </div>
-
-          <style>{`
-            @media (max-width: 900px) {
-              section[style*="repeat(4, 1fr)"] > div { }
-              section[style*="repeat(4, 1fr)"] { grid-template-columns: 1fr !important; }
-            }
-          `}</style>
-        </section>
-
-        {/* HOW IT WORKS + TOPICS */}
-        <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div
-            style={{
-              border: "1px solid #eee",
-              borderRadius: 18,
-              background: "#fff",
-              padding: 18,
-              boxShadow: "0 12px 34px rgba(15, 23, 42, 0.06)",
-            }}
-          >
-            <SectionTitle kicker="Simple process" title="How it works" subtitle="No admin chaos. No endless messaging." />
-
-            <div style={{ display: "grid", gap: 10 }}>
-              {howItWorks.map((h) => (
-                <div
-                  key={h.step}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "42px 1fr",
-                    gap: 10,
-                    alignItems: "start",
-                    padding: 12,
-                    borderRadius: 14,
-                    border: "1px solid #eaeaea",
-                    background: "#fff",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: 14,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "#f4f7ff",
-                      border: "1px solid #d9e3ff",
-                      fontWeight: 950,
-                      color: BRAND_BLUE,
-                    }}
-                  >
-                    {h.step}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 950, marginBottom: 4 }}>{h.title}</div>
-                    <div style={{ color: "#555", fontSize: 14, lineHeight: 1.5 }}>{h.text}</div>
-                  </div>
+                    <div className="flex items-center gap-4">
+                        {session ? (
+                            <a href={dashboardUrl} className="bg-gray-900 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-lg hover:bg-black transition-all active:scale-95">
+                                Go to Dashboard
+                            </a>
+                        ) : (
+                            <>
+                                <a href="/auth/sign-in" className="text-gray-600 font-bold text-sm hover:text-gray-900 hidden sm:block">Sign In</a>
+                                <a href="/auth/sign-up" className="bg-[#24985b] text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-lg shadow-[#24985b]/30 hover:bg-[#1d824d] transition-all active:scale-95">
+                                    Get Started
+                                </a>
+                            </>
+                        )}
+                    </div>
                 </div>
-              ))}
-            </div>
-          </div>
+            </nav>
 
-          <div
-            style={{
-              border: "1px solid #eee",
-              borderRadius: 18,
-              background: "#fff",
-              padding: 18,
-              boxShadow: "0 12px 34px rgba(15, 23, 42, 0.06)",
-            }}
-          >
-            <SectionTitle kicker="Coverage" title="What I tutor" subtitle="A practical focus, with plenty of practice." />
+            {/* 🚀 HERO SECTION */}
+            <section className="pt-32 pb-20 lg:pt-48 lg:pb-32 px-6 relative overflow-hidden">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[100%] h-[100%] opacity-40 pointer-events-none"
+                    style={{
+                        background: "radial-gradient(circle at 50% 50%, #d9b9fc 0%, #bbf7d0 100%)"
+                    }}>
 
-            <ul style={{ margin: 0, paddingLeft: 18, color: "#333", lineHeight: 1.65 }}>
-              {topics.map((t) => (
-                <li key={t} style={{ marginBottom: 6 }}>
-                  <span style={{ color: "#555", fontWeight: 650 }}>{t}</span>
-                </li>
-              ))}
-            </ul>
+                    </div>
 
-            <div
-              style={{
-                marginTop: 12,
-                padding: 12,
-                borderRadius: 14,
-                border: "1px dashed #c9d7ff",
-                background: "#f4f7ff",
-                color: "#2b3a67",
-                fontSize: 14,
-                lineHeight: 1.5,
-                fontWeight: 700,
-              }}
-            >
-              Not sure what level your child is at? Book a first lesson and we’ll identify the gaps quickly.
-            </div>
-          </div>
+                <div className="max-w-4xl mx-auto text-center relative z-10 animate-in slide-in-from-bottom-8 duration-700">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#eaf6ef] text-[#24985b] font-bold text-xs uppercase tracking-widest mb-6 border border-[#24985b]/20">
+                        <span className="w-2 h-2 rounded-full bg-[#24985b] animate-pulse"></span>
+                        Now accepting new students
+                    </div>
 
-          <style>{`
-            @media (max-width: 900px) {
-              section[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
-            }
-          `}</style>
-        </section>
+                    <h1 className="text-5xl md:text-7xl font-black tracking-tight text-gray-900 leading-[1.1] mb-6">
+                        Expert Tutoring, <br className="hidden md:block" />
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#24985b] to-[#0b3d91]">Tailored to Succeed.</span>
+                    </h1>
 
-        {/* TESTIMONIALS */}
-        <section
-          style={{
-            border: "1px solid #eee",
-            borderRadius: 18,
-            background: "#fff",
-            padding: 18,
-            boxShadow: "0 12px 34px rgba(15, 23, 42, 0.06)",
-          }}
-        >
-          <SectionTitle
-            kicker="Feedback"
-            title="What parents say"
-            subtitle="These are placeholders for now. Replace them with real reviews whenever you’re ready."
-          />
+                    <p className="text-lg md:text-xl text-gray-500 font-medium mb-10 max-w-2xl mx-auto leading-relaxed">
+                        Book top-tier tutors, manage your children's lessons, and track their progress all in one easy-to-use platform.
+                    </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-            {testimonials.map((t) => (
-              <div
-                key={t.name}
-                style={{
-                  border: "1px solid #eaeaea",
-                  borderRadius: 16,
-                  padding: 14,
-                  background: "#fff",
-                }}
-              >
-                <div style={{ fontWeight: 950, marginBottom: 8, color: "#111" }}>{t.name}</div>
-                <div style={{ color: "#555", fontSize: 14, lineHeight: 1.6 }}>{t.text}</div>
-              </div>
-            ))}
-          </div>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                        <a href="/auth/sign-up" className="w-full sm:w-auto bg-[#24985b] text-white px-8 py-4 rounded-full font-black text-lg shadow-xl shadow-[#24985b]/20 hover:bg-[#1d824d] hover:-translate-y-1 transition-all">
+                            Find a Tutor Today
+                        </a>
+                        <a href="/auth/sign-in" className="w-full sm:w-auto bg-white text-gray-900 border-2 border-gray-100 px-8 py-4 rounded-full font-black text-lg hover:border-gray-200 hover:bg-gray-50 transition-all">
+                            I'm a Tutor
+                        </a>
+                    </div>
+                </div>
+            </section>
 
-          <style>{`
-            @media (max-width: 900px) {
-              section[style*="repeat(3, 1fr)"] { grid-template-columns: 1fr !important; }
-            }
-          `}</style>
-        </section>
+            {/* 🚀 HOW IT WORKS */}
+            <section id="how-it-works" className="py-24 bg-gray-50 border-y border-gray-100">
+                <div className="max-w-6xl mx-auto px-6">
+                    <div className="text-center mb-16">
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4">How DarshaTutor Works</h2>
+                        <p className="text-gray-500 font-medium">Three simple steps to better grades and higher confidence.</p>
+                    </div>
 
-        {/* FINAL CTA */}
-        <section
-          style={{
-            borderRadius: 18,
-            border: `1px solid ${BRAND_BLUE}`,
-            background: `linear-gradient(180deg, ${BRAND_BLUE} 0%, #082f72 100%)`,
-            color: "#fff",
-            padding: 18,
-            boxShadow: "0 16px 44px rgba(11, 61, 145, 0.22)",
-          }}
-        >
-          <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: -0.2 }}>
-              Ready to book your first lesson?
-            </div>
-            <div style={{ opacity: 0.92, lineHeight: 1.55, maxWidth: 760 }}>
-              Create an account in seconds, choose a time, and you’re done. You’ll get email confirmations for bookings and cancellations.
-            </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-gray-100 relative group hover:shadow-xl hover:border-[#24985b]/30 transition-all">
+                            <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-6">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                            </div>
+                            <h3 className="text-xl font-black text-gray-900 mb-2">1. Create a Profile</h3>
+                            <p className="text-gray-500 font-medium text-sm leading-relaxed">Sign up in seconds and add your children's profiles, including their current year levels.</p>
+                        </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
-              <Link
-                href="/auth/sign-up"
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.55)",
-                  background: "#fff",
-                  color: BRAND_BLUE,
-                  textDecoration: "none",
-                  fontWeight: 950,
-                }}
-              >
-                Get started
-              </Link>
+                        <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-gray-100 relative group hover:shadow-xl hover:border-[#24985b]/30 transition-all">
+                            <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </div>
+                            <h3 className="text-xl font-black text-gray-900 mb-2">2. Book a Lesson</h3>
+                            <p className="text-gray-500 font-medium text-sm leading-relaxed">Select a subject, choose whether you want online or in-person, and instantly lock in a time.</p>
+                        </div>
 
-              {/* <Link
-                href="/book"
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.55)",
-                  background: "rgba(255,255,255,0.12)",
-                  color: "#fff",
-                  textDecoration: "none",
-                  fontWeight: 950,
-                }}
-              >
-                View times / book
-              </Link> */}
+                        <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-gray-100 relative group hover:shadow-xl hover:border-[#24985b]/30 transition-all">
+                            <div className="w-14 h-14 bg-[#eaf6ef] text-[#24985b] rounded-2xl flex items-center justify-center mb-6">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <h3 className="text-xl font-black text-gray-900 mb-2">3. Learn & Pay</h3>
+                            <p className="text-gray-500 font-medium text-sm leading-relaxed">Your child attends the lesson, and you can securely pay the invoice directly from your dashboard.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-              <Link
-                href="/auth/sign-in"
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: "1px solid transparent",
-                  background: "transparent",
-                  color: "#fff",
-                  textDecoration: "none",
-                  fontWeight: 950,
-                }}
-              >
-                Sign in
-              </Link>
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
+            {/* 🚀 FEATURES */}
+            <section id="features" className="py-24">
+                <div className="max-w-6xl mx-auto px-6">
+                    <div className="bg-gray-900 rounded-[3rem] p-10 md:p-20 flex flex-col md:flex-row items-center justify-between gap-12 overflow-hidden relative">
+                        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#24985b] opacity-20 blur-[100px] rounded-full pointer-events-none translate-x-1/3 -translate-y-1/3"></div>
+
+                        <div className="flex-1 relative z-10">
+                            <h2 className="text-3xl md:text-4xl font-black text-white mb-6 leading-tight">Everything you need to manage tutoring.</h2>
+                            <ul className="space-y-5">
+                                <li className="flex items-center gap-4 text-gray-300 font-medium">
+                                    <div className="w-8 h-8 rounded-full bg-[#24985b]/20 text-[#24985b] flex items-center justify-center shrink-0">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    </div>
+                                    View all upcoming lessons in one sleek dashboard.
+                                </li>
+                                <li className="flex items-center gap-4 text-gray-300 font-medium">
+                                    <div className="w-8 h-8 rounded-full bg-[#24985b]/20 text-[#24985b] flex items-center justify-center shrink-0">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    </div>
+                                    Request reschedules or cancellations with one click.
+                                </li>
+                                <li className="flex items-center gap-4 text-gray-300 font-medium">
+                                    <div className="w-8 h-8 rounded-full bg-[#24985b]/20 text-[#24985b] flex items-center justify-center shrink-0">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    </div>
+                                    Pay securely via standard bank transfer using POLi.
+                                </li>
+                            </ul>
+                            <a href="/auth/sign-up" className="inline-block mt-10 bg-[#24985b] text-white px-8 py-4 rounded-full font-black shadow-lg hover:bg-[#1d824d] transition-colors">
+                                Create Free Account
+                            </a>
+                        </div>
+
+                        <div className="flex-1 w-full relative z-10">
+                            <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                                <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+                                    <div className="text-white font-bold">Upcoming Lesson</div>
+                                    <div className="bg-[#24985b] text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">Confirmed</div>
+                                </div>
+                                <div className="text-white">
+                                    <div className="text-xl font-black mb-1">Mathematics</div>
+                                    <div className="text-gray-400 text-sm font-medium">with Marina Bloom • 60 mins</div>
+                                </div>
+                                <div className="mt-6 flex gap-3">
+                                    <div className="h-10 flex-1 bg-white/5 rounded-xl border border-white/10"></div>
+                                    <div className="h-10 flex-[2] bg-[#24985b] rounded-xl"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 🚀 FOOTER */}
+            <footer className="bg-white border-t border-gray-100 py-12 text-center">
+                <div className="flex items-center justify-center gap-2 mb-4">
+                    <div className="w-6 h-6 bg-[#24985b] rounded flex items-center justify-center text-white font-black text-xs">D</div>
+                    <span className="text-lg font-black tracking-tight text-gray-900">DarshaTutor</span>
+                </div>
+                <p className="text-sm font-medium text-gray-400 mb-6">Empowering students to reach their full potential.</p>
+                <div className="flex items-center justify-center gap-6 text-sm font-bold text-gray-500">
+                    <a href="/auth/sign-in" className="hover:text-gray-900 transition-colors">Sign In</a>
+                    <a href="/auth/sign-up" className="hover:text-gray-900 transition-colors">Sign Up</a>
+                </div>
+                <p className="text-xs font-medium text-gray-400 mt-12">© {new Date().getFullYear()} DarshaTutor. All rights reserved.</p>
+            </footer>
+        </div>
+    );
 }

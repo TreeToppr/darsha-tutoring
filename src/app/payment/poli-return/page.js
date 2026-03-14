@@ -38,6 +38,17 @@ import Link from "next/link";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
+export default function PoliReturn() {
+    const searchParams = useSearchParams();
+    const token = searchParams.get('token'); // This is the 'payment token'
+
+    if (!token) {
+        return <div>Error: Invalid or missing payment token.</div>;
+    }
+
+    // Now call your verify API with this token
+}
+
 // 1. Move your logic into this inner component
 function ReturnContent() {
     const searchParams = useSearchParams();

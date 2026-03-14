@@ -1,69 +1,94 @@
-import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
-import { requireUserIdFromBearer, getGoogleAccessTokenForUser } from "../../google/_util";
+import { NextResponse } from 'next/server';
+import { google } from 'googleapis';
+import { createClient } from '@supabase/supabase-js';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export async function POST(request) {
+    const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
 
-function jsonError(message, status = 400) {
-    return NextResponse.json({ ok: false, error: message }, { status });
-}
-
-export async function GET(req) {
     try {
-        // Require auth (parent must be signed in to see tutor busy blocks)
-        await requireUserIdFromBearer(req);
+        const { tutorId, timeMin, timeMax } = await request.json();
 
-        const { searchParams } = new URL(req.url);
-        const tutorId = searchParams.get("tutorId");
-        const timeMin = searchParams.get("timeMin");
-        const timeMax = searchParams.get("timeMax");
-
-        if (!tutorId) return jsonError("Missing tutorId", 400);
-        if (!timeMin || !timeMax) return jsonError("Missing timeMin/timeMax", 400);
-
-        // Find the tutor's profile_id (the Supabase auth user id)
-        const { data: tutor, error: tErr } = await supabaseAdmin
-            .from("tutors")
-            .select("id, profile_id")
-            .eq("id", tutorId)
+        // 1. FETCH TUTOR'S PERMANENT REFRESH TOKEN
+        // This allows us to sync even when you are offline
+        const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('google_refresh_token')
+            .eq('id', tutorId)
             .single();
 
-        if (tErr || !tutor?.profile_id) return jsonError("Tutor not found", 404);
+        const liveGoogleToken = request.headers.get('x-google-token');
+        let mergedBusyBlocks = [];
 
-        // If tutor hasn't connected Google, return ok:true with empty busy
-        let accessToken = null;
-        try {
-            accessToken = await getGoogleAccessTokenForUser(tutor.profile_id);
-        } catch {
-            return NextResponse.json({ ok: true, connected: false, busy: [] });
+        // 2. FETCH LOCAL SUPABASE BOOKINGS
+        const { data: localBookings } = await supabaseAdmin
+            .from('bookings')
+            .select('session_date, start_time, duration, status')
+            .eq('tutor_id', tutorId)
+            .neq('status', 'declined');
+
+        if (localBookings) {
+            localBookings.forEach(booking => {
+                const [hours, minutes] = booking.start_time.split(':');
+                const startMins = parseInt(hours, 10) * 60 + parseInt(minutes, 10);
+                const endMins = startMins + (booking.duration || 60);
+                mergedBusyBlocks.push({
+                    start: `${booking.session_date}T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00`,
+                    end: `${booking.session_date}T${Math.floor(endMins / 60).toString().padStart(2, '0')}:${(endMins % 60).toString().padStart(2, '0')}:00`
+                });
+            });
         }
 
-        const FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy";
+        // 3. GOOGLE CALENDAR SYNC (Now with Auto-Refresh)
+        const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_OAUTH_CLIENT_ID,
+            process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+            process.env.GOOGLE_OAUTH_REDIRECT_URI
+        );
 
-        const googleRes = await fetch(FREEBUSY_URL, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "content-type": "application/json",
-            },
-            body: JSON.stringify({
-                timeMin,
-                timeMax,
-                items: [{ id: "primary" }],
-            }),
+        // 🚀 THE FIX: Prioritize the Refresh Token for "Always-On" sync
+        if (profile?.google_refresh_token) {
+            oauth2Client.setCredentials({ refresh_token: profile.google_refresh_token });
+        } else if (liveGoogleToken && liveGoogleToken !== 'undefined') {
+            oauth2Client.setCredentials({ access_token: liveGoogleToken });
+        }
+
+        // Only attempt Google sync if we have some form of credential
+        if (oauth2Client.credentials.access_token || oauth2Client.credentials.refresh_token) {
+            try {
+                const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+                const eventsRes = await calendar.events.list({
+                    calendarId: 'primary',
+                    timeMin,
+                    timeMax,
+                    singleEvents: true,
+                });
+
+                const googleBusy = (eventsRes.data.items || []).map(event => ({
+                    start: event.start.dateTime || `${event.start.date}T00:00:00`,
+                    end: event.end.dateTime || `${event.end.date}T23:59:59`,
+                }));
+                mergedBusyBlocks = [...mergedBusyBlocks, ...googleBusy];
+            } catch (gErr) {
+                console.error("Background Google Sync failed:", gErr.message);
+            }
+        }
+
+        // 4. FETCH TUTOR WORKING HOURS
+        const { data: workingHours } = await supabaseAdmin
+            .from('tutor_availability')
+            .select('*')
+            .eq('tutor_id', tutorId);
+
+        return NextResponse.json({
+            busy: mergedBusyBlocks,
+            workingHours: workingHours || []
         });
 
-        const data = await googleRes.json().catch(() => ({}));
-
-        if (!googleRes.ok) {
-            const msg = data?.error?.message || `Google freebusy failed (${googleRes.status})`;
-            return jsonError(msg, 502);
-        }
-
-        const busy = data?.calendars?.primary?.busy || [];
-        return NextResponse.json({ ok: true, connected: true, busy });
-    } catch (e) {
-        return jsonError(e?.message || "Failed", 500);
+    } catch (error) {
+        console.error("Critical Freebusy Error:", error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

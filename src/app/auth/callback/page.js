@@ -1,17 +1,16 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "../../../lib/supabaseClient";
+'use client';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../../../lib/supabaseClient';
 
 export default function AuthCallbackPage() {
     const router = useRouter();
-    const [message, setMessage] = useState("Signing you in...");
+    const [message, setMessage] = useState("Securing Connection...");
 
     useEffect(() => {
         const run = async () => {
             try {
-                // If we landed here with an OAuth code, exchange it for a session
+                // 1. If we landed here with an OAuth code, exchange it for a session
                 const url = new URL(window.location.href);
                 const code = url.searchParams.get("code");
 
@@ -20,11 +19,23 @@ export default function AuthCallbackPage() {
                     if (exchangeError) throw exchangeError;
                 }
 
-                const { data: userRes, error: userError } = await supabase.auth.getUser();
-                if (userError || !userRes?.user) throw userError || new Error("No user session found.");
-                const user = userRes.user;
+                // 2. Grab the active session
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                if (sessionError || !session) throw sessionError || new Error("No user session found.");
 
-                // Ensure profile exists (Google users often won't have one yet)
+                const user = session.user;
+
+                // 3. 🚀 THE NEW FIX: Extract and save the Google Provider Token!
+                const googleRefreshToken = session.provider_refresh_token;
+
+                if (googleRefreshToken) {
+                    await supabase
+                        .from('profiles')
+                        .update({ google_refresh_token: googleRefreshToken })
+                        .eq('id', user.id);
+                }
+
+                // 4. Ensure profile exists and check role
                 const { data: profile, error: profileError } = await supabase
                     .from("profiles")
                     .select("role")
@@ -34,12 +45,7 @@ export default function AuthCallbackPage() {
                 let role = profile?.role;
 
                 if (profileError || !profile) {
-                    const fallbackName =
-                        user.user_metadata?.full_name ||
-                        user.user_metadata?.name ||
-                        user.email ||
-                        "Parent";
-
+                    const fallbackName = user.user_metadata?.full_name || user.user_metadata?.name || user.email || "Parent";
                     const fallbackPhone = user.user_metadata?.phone_number || null;
 
                     const { error: insertError } = await supabase.from("profiles").insert({
@@ -50,28 +56,29 @@ export default function AuthCallbackPage() {
                     });
 
                     if (insertError) throw insertError;
-
                     role = "parent";
                 }
 
-                if (role === "parent") router.push("/parent/dashboard");
-                else if (role === "student") router.push("/student/dashboard");
-                else if (role === "tutor") router.push("/tutor/dashboard");
-                else if (role === "admin") router.push("/admin/dashboard");
+                // 5. Route them home!
+                if (role === "parent") router.push("/parent-dashboard");
+                else if (role === "tutor") router.push("/tutor-dashboard");
+                else if (role === "admin") router.push("/admin-dashboard");
                 else router.push("/auth/sign-in");
+
             } catch (e) {
-                setMessage(e?.message || "Sign-in failed.");
+                console.error("Callback Error:", e);
+                setMessage(e?.message || "Sign-in failed. Redirecting...");
+                setTimeout(() => router.push('/auth/sign-in'), 3000);
             }
         };
 
         run();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [router]);
 
     return (
-        <main style={{ maxWidth: 520, margin: "0 auto", padding: 32 }}>
-            <h1>One moment…</h1>
-            <p>{message}</p>
-        </main>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+            <div className="w-12 h-12 border-4 border-[#24985b] border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-gray-500 font-bold uppercase tracking-widest text-sm animate-pulse">{message}</p>
+        </div>
     );
 }

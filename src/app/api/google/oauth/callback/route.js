@@ -1,79 +1,56 @@
-import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-export async function GET(req) {
-    const { searchParams } = new URL(req.url);
-    const code = searchParams.get("code");
-    const state = searchParams.get("state");
+export async function GET(request) {
+    const { searchParams } = new URL(request.url);
+    const code = searchParams.get('code');
 
-    if (!code || !state) {
-        return NextResponse.json({ error: "Missing code/state" }, { status: 400 });
-    }
+    const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY // Uses your secure server key
+    );
 
-    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
-
-    if (!clientId || !clientSecret || !redirectUri) {
-        return NextResponse.json({ error: "Google OAuth env vars missing" }, { status: 500 });
-    }
-
-    // Look up state -> user_id + context, then delete it
-    const { data: stateRow, error: stateErr } = await supabaseAdmin
-        .from("google_oauth_states")
-        .select("user_id, context")
-        .eq("state", state)
-        .single();
-
-    if (stateErr || !stateRow) {
-        return NextResponse.json({ error: "Invalid/expired state" }, { status: 400 });
-    }
-
-    await supabaseAdmin.from("google_oauth_states").delete().eq("state", state);
-
-    // Exchange auth code for tokens
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-            code,
-            client_id: clientId,
-            client_secret: clientSecret,
-            redirect_uri: redirectUri,
-            grant_type: "authorization_code",
-        }),
-    });
-
-    const tokenJson = await tokenRes.json();
-
-    if (!tokenRes.ok) {
-        return NextResponse.json({ error: tokenJson?.error_description || "Token exchange failed" }, { status: 400 });
-    }
-
-    // IMPORTANT: refresh_token only returned on first consent (or prompt=consent)
-    const refreshToken = tokenJson.refresh_token;
-    if (!refreshToken) {
-        return NextResponse.json({
-            error:
-                "No refresh_token received. Remove app access in Google Account and reconnect, or keep prompt=consent.",
-        }, { status: 400 });
-    }
-
-    const scope = tokenJson.scope || null;
-
-    const { error: upsertErr } = await supabaseAdmin
-        .from("google_calendar_connections")
-        .upsert({
-            user_id: stateRow.user_id,
-            provider: "google",
-            refresh_token: refreshToken,
-            scope,
-            updated_at: new Date().toISOString(),
+    try {
+        // 1. Exchange code for tokens
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                code,
+                client_id: process.env.GOOGLE_OAUTH_CLIENT_ID,
+                client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+                redirect_uri: process.env.GOOGLE_OAUTH_REDIRECT_URI,
+                grant_type: 'authorization_code',
+            }),
         });
 
-    if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+        const tokens = await tokenResponse.json();
+        if (tokens.error) throw new Error(tokens.error_description);
 
-    // Send user back to the right dashboard
-    const redirectTo = stateRow.context === "tutor_busy" ? "/tutor/dashboard" : "/parent/dashboard";
-    return NextResponse.redirect(new URL(redirectTo, req.url));
+        // 2. Get the Google User info just to find the right profile
+        const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: { Authorization: `Bearer ${tokens.access_token}` },
+        });
+        const googleUser = await userRes.json();
+
+        // 3. Update ONLY the refresh token
+        // We removed 'google_email' because it's missing from your table
+        const { error: updateError } = await supabaseAdmin
+            .from('profiles')
+            .update({
+                google_refresh_token: tokens.refresh_token
+            })
+            .eq('email', googleUser.email);
+
+        if (updateError) {
+            console.error("Database Save Failed:", updateError);
+            throw updateError;
+        }
+
+        return NextResponse.redirect(`${process.env.APP_BASE_URL}/tutor-dashboard?sync=success`);
+
+    } catch (error) {
+        console.error("Sync Error:", error.message);
+        return NextResponse.redirect(`${process.env.APP_BASE_URL}/tutor-dashboard?error=sync_failed`);
+    }
 }
