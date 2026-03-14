@@ -73,54 +73,58 @@ export default function CalendarPage() {
 
         let combined = [...(localData || [])];
 
-        try {
-            // 🚀 THE FIX: We pass the live provider_token directly from the browser!
-            const res = await fetch('/api/google/calendar/list', {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'x-google-token': session.provider_token || '' // Send the Google token
+        if (session.provider_token) {
+            try {
+                // 🚀 THE FIX: We pass the live provider_token directly from the browser!
+                const res = await fetch('/api/google/calendar/list', {
+                    headers: {
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'x-google-token': session.provider_token || '' // Send the Google token
+                    }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.events) {
+                        const googleEvents = data.events.map(g => {
+                            const isAllDay = !g.start.dateTime;
+                            let session_date, start_time, durationMinutes;
+
+                            if (isAllDay) {
+                                session_date = g.start.date;
+                                start_time = "08:00";
+                                durationMinutes = 60;
+                            } else {
+                                const startDate = new Date(g.start.dateTime);
+                                const endDate = new Date(g.end.dateTime);
+                                durationMinutes = (endDate - startDate) / (1000 * 60);
+                                const pad = (n) => String(n).padStart(2, '0');
+                                session_date = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`;
+                                start_time = `${pad(startDate.getHours())}:${pad(startDate.getMinutes())}`;
+                            }
+
+                            return {
+                                id: g.id,
+                                subject: g.summary || 'Google Event',
+                                session_date,
+                                start_time,
+                                duration: durationMinutes,
+                                is_personal: true,
+                                is_external: true,
+                                location: g.location
+                            };
+                        });
+
+                        googleEvents.forEach(g => {
+                            if (!combined.some(l => l.google_event_id === g.id)) combined.push(g);
+                        });
+                    }
                 }
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                if (data.events) {
-                    const googleEvents = data.events.map(g => {
-                        const isAllDay = !g.start.dateTime;
-                        let session_date, start_time, durationMinutes;
-
-                        if (isAllDay) {
-                            session_date = g.start.date;
-                            start_time = "08:00";
-                            durationMinutes = 60;
-                        } else {
-                            const startDate = new Date(g.start.dateTime);
-                            const endDate = new Date(g.end.dateTime);
-                            durationMinutes = (endDate - startDate) / (1000 * 60);
-                            const pad = (n) => String(n).padStart(2, '0');
-                            session_date = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`;
-                            start_time = `${pad(startDate.getHours())}:${pad(startDate.getMinutes())}`;
-                        }
-
-                        return {
-                            id: g.id,
-                            subject: g.summary || 'Google Event',
-                            session_date,
-                            start_time,
-                            duration: durationMinutes,
-                            is_personal: true,
-                            is_external: true,
-                            location: g.location
-                        };
-                    });
-
-                    googleEvents.forEach(g => {
-                        if (!combined.some(l => l.google_event_id === g.id)) combined.push(g);
-                    });
-                }
+            } catch (e) {
+                console.error("Network error fetching Google events:", e);
             }
-        } catch (e) {
-            console.error("Network error fetching Google events:", e);
+        } else {
+            console.log("Skipping Google Sync: Tutor not logged in via Google.");
         }
 
         setEvents(combined);
