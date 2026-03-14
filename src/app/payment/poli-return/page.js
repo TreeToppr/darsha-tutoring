@@ -38,7 +38,7 @@ import Link from "next/link";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-export default function PoliReturn() {
+function PoliReturn() {
     const searchParams = useSearchParams();
     const token = searchParams.get('token'); // This is the 'payment token'
 
