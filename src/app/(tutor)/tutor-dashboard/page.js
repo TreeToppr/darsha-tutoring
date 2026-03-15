@@ -115,16 +115,10 @@ export default function TutorDashboard() {
         setSelectedBooking(null);
     };
 
-    // 🚀 NEW: Function to open the picker and pre-fill the inputs!
     const handleOpenReschedulePicker = () => {
         if (!selectedBooking) return;
-
-        // Pre-fill with the Parent's requested date, or fallback to the current lesson date
         setNewDate(selectedBooking.reschedule_new_date || selectedBooking.session_date || '');
-
-        // Pre-fill with the Parent's requested time, or fallback to the current lesson time
         setNewTime(selectedBooking.reschedule_new_start_time || selectedBooking.start_time || '');
-
         setIsRescheduling(true);
     };
 
@@ -176,6 +170,34 @@ export default function TutorDashboard() {
         setSelectedBooking(null);
     };
 
+    const handleCancelLesson = async (bookingId) => {
+        if (!window.confirm("Are you sure you want to cancel this lesson?")) return;
+
+        const { error } = await supabase
+            .from('bookings')
+            .update({ status: 'cancelled', reschedule_status: null })
+            .eq('id', bookingId);
+
+        if (error) alert(error.message);
+        fetchDashboardData();
+        setSelectedBooking(null);
+    };
+
+    const handleMarkAsPaid = async (bookingId) => {
+        const { error } = await supabase
+            .from('bookings')
+            .update({ payment_status: 'paid' })
+            .eq('id', bookingId);
+
+        if (error) {
+            alert("Failed to update payment: " + error.message);
+            return;
+        }
+        fetchDashboardData();
+        // Optimistically update the open modal so you see it change instantly!
+        setSelectedBooking(prev => ({ ...prev, payment_status: 'paid' }));
+    };
+
     const formatBeautifulDate = (dateStr, timeStr) => {
         if (!dateStr || !timeStr) return '';
         const date = new Date(dateStr);
@@ -196,16 +218,31 @@ export default function TutorDashboard() {
 
     const isReschedule = (b) => b.reschedule_status === 'requested' || b.reschedule_status === 'pending' || !!b.reschedule_new_date;
 
-    const upcomingBookings = bookings.filter(b => (b.status === 'accepted' || b.status === 'completed') && !isReschedule(b));
+    // 🚀 NEW: Check if a lesson is in the past
+    const nowObj = new Date();
+    const isPastLesson = (dateStr, timeStr) => {
+        if (!dateStr || !timeStr) return false;
+        const [yyyy, mm, dd] = dateStr.split('-');
+        const [hh, min] = timeStr.split(':');
+        const lessonDate = new Date(yyyy, mm - 1, dd, hh, min);
+        return lessonDate < nowObj;
+    };
+
+    // 🚀 NEW: Split upcoming and past bookings automatically
+    const upcomingBookings = bookings.filter(b => (b.status === 'accepted' || b.status === 'completed') && !isReschedule(b) && !isPastLesson(b.session_date, b.start_time));
+    const pastBookings = bookings.filter(b => (b.status === 'accepted' || b.status === 'completed') && !isReschedule(b) && isPastLesson(b.session_date, b.start_time)).reverse(); // Reverse so newest past lessons are at the top
+
     const rescheduleBookings = bookings.filter(b => isReschedule(b));
     const pendingBookings = bookings.filter(b => b.status === 'requested' && !isReschedule(b));
     const cancelledBookings = bookings.filter(b => b.status === 'cancelled' || b.status === 'rejected');
 
+    // 🚀 NEW: Added past state mapping
     const displayBookings =
         activeTab === 'upcoming' ? upcomingBookings :
-            activeTab === 'pending' ? pendingBookings :
-                activeTab === 'reschedule' ? rescheduleBookings :
-                    cancelledBookings;
+            activeTab === 'past' ? pastBookings :
+                activeTab === 'pending' ? pendingBookings :
+                    activeTab === 'reschedule' ? rescheduleBookings :
+                        cancelledBookings;
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 relative">
@@ -240,17 +277,36 @@ export default function TutorDashboard() {
 
             {/* Bookings List Section */}
             <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-8 pt-6 border-b border-gray-100 flex gap-8 overflow-x-auto custom-scrollbar whitespace-nowrap">
-                    <button onClick={() => setActiveTab('upcoming')} className={`pb-4 text-sm md:text-base font-black transition-all ${activeTab === 'upcoming' ? 'text-gray-900 border-b-2 border-[#24985b]' : 'text-gray-400 hover:text-gray-600'}`}>Upcoming Lessons</button>
-                    <button onClick={() => setActiveTab('pending')} className={`pb-4 text-sm md:text-base font-black transition-all flex items-center gap-2 ${activeTab === 'pending' ? 'text-gray-900 border-b-2 border-[#24985b]' : 'text-gray-400 hover:text-gray-600'}`}>
+
+                {/* 🚀 NEW: Mobile Dropdown View */}
+                <div className="block md:hidden p-6 border-b border-gray-100 bg-gray-50/50">
+                    <select
+                        value={activeTab}
+                        onChange={(e) => setActiveTab(e.target.value)}
+                        className="w-full bg-white border border-gray-200 text-gray-900 font-black text-sm rounded-xl p-4 outline-none shadow-sm focus:ring-2 focus:ring-[#24985b]/20 focus:border-[#24985b] appearance-none cursor-pointer"
+                        style={{ backgroundImage: `url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2324985b%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.4-12.8z%22%2F%3E%3C%2Fsvg%3E')`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1.2rem top 50%', backgroundSize: '0.65rem auto' }}
+                    >
+                        <option value="upcoming">Upcoming Lessons</option>
+                        <option value="past">Past Bookings</option>
+                        <option value="pending">Pending Requests ({pendingBookings.length})</option>
+                        <option value="reschedule">Reschedules ({rescheduleBookings.length})</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+
+                {/* 🚀 NEW: Desktop Tabs View */}
+                <div className="hidden md:flex px-8 pt-6 border-b border-gray-100 gap-8 whitespace-nowrap">
+                    <button onClick={() => setActiveTab('upcoming')} className={`pb-4 text-base font-black transition-all ${activeTab === 'upcoming' ? 'text-gray-900 border-b-2 border-[#24985b]' : 'text-gray-400 hover:text-gray-600'}`}>Upcoming</button>
+                    <button onClick={() => setActiveTab('past')} className={`pb-4 text-base font-black transition-all ${activeTab === 'past' ? 'text-gray-900 border-b-2 border-[#24985b]' : 'text-gray-400 hover:text-gray-600'}`}>Past Bookings</button>
+                    <button onClick={() => setActiveTab('pending')} className={`pb-4 text-base font-black transition-all flex items-center gap-2 ${activeTab === 'pending' ? 'text-gray-900 border-b-2 border-[#24985b]' : 'text-gray-400 hover:text-gray-600'}`}>
                         Pending Requests
                         {pendingBookings.length > 0 && <span className={`px-2 py-0.5 rounded-full text-[10px] text-white ${activeTab === 'pending' ? 'bg-orange-500' : 'bg-orange-300'}`}>{pendingBookings.length}</span>}
                     </button>
-                    <button onClick={() => setActiveTab('reschedule')} className={`pb-4 text-sm md:text-base font-black transition-all flex items-center gap-2 ${activeTab === 'reschedule' ? 'text-gray-900 border-b-2 border-blue-500' : 'text-gray-400 hover:text-gray-600'}`}>
+                    <button onClick={() => setActiveTab('reschedule')} className={`pb-4 text-base font-black transition-all flex items-center gap-2 ${activeTab === 'reschedule' ? 'text-gray-900 border-b-2 border-blue-500' : 'text-gray-400 hover:text-gray-600'}`}>
                         Reschedules
                         {rescheduleBookings.length > 0 && <span className={`px-2 py-0.5 rounded-full text-[10px] text-white ${activeTab === 'reschedule' ? 'bg-blue-500' : 'bg-blue-300'}`}>{rescheduleBookings.length}</span>}
                     </button>
-                    <button onClick={() => setActiveTab('cancelled')} className={`pb-4 text-sm md:text-base font-black transition-all ${activeTab === 'cancelled' ? 'text-gray-900 border-b-2 border-red-500' : 'text-gray-400 hover:text-gray-600'}`}>Cancelled</button>
+                    <button onClick={() => setActiveTab('cancelled')} className={`pb-4 text-base font-black transition-all ${activeTab === 'cancelled' ? 'text-gray-900 border-b-2 border-red-500' : 'text-gray-400 hover:text-gray-600'}`}>Cancelled</button>
                 </div>
 
                 <div className="divide-y divide-gray-50 min-h-[300px]">
@@ -260,10 +316,10 @@ export default function TutorDashboard() {
                                 {activeTab === 'upcoming' ? <CalendarIcon /> : activeTab === 'cancelled' ? <CloseIcon /> : <BookIcon />}
                             </div>
                             <h3 className="text-lg font-bold text-gray-900 mb-1">
-                                {activeTab === 'upcoming' ? "No upcoming lessons" : activeTab === 'pending' ? "You're all caught up!" : activeTab === 'reschedule' ? "No reschedule requests" : "No cancelled lessons"}
+                                {activeTab === 'upcoming' ? "No upcoming lessons" : activeTab === 'past' ? "No past history" : activeTab === 'pending' ? "You're all caught up!" : activeTab === 'reschedule' ? "No reschedule requests" : "No cancelled lessons"}
                             </h3>
                             <p className="text-gray-400 font-medium text-sm">
-                                {activeTab === 'upcoming' ? "When you accept requests, they will appear here." : activeTab === 'pending' ? "You don't have any pending requests to review." : activeTab === 'reschedule' ? "Students haven't requested any changes." : "Everything is running smoothly."}
+                                {activeTab === 'upcoming' ? "When you accept requests, they will appear here." : activeTab === 'past' ? "Your completed history will show up here." : activeTab === 'pending' ? "You don't have any pending requests to review." : activeTab === 'reschedule' ? "Students haven't requested any changes." : "Everything is running smoothly."}
                             </p>
                         </div>
                     ) : (
@@ -282,21 +338,22 @@ export default function TutorDashboard() {
                                 >
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="font-bold text-gray-900 text-lg group-hover:text-[#24985b] transition-colors">{b.subject}</h3>
+                                            <h3 className={`font-bold text-lg transition-colors ${activeTab === 'past' ? 'text-gray-500 group-hover:text-gray-900' : 'text-gray-900 group-hover:text-[#24985b]'}`}>{b.subject}</h3>
                                             {isReschedule(b) && activeTab !== 'reschedule' && (
                                                 <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-600">Reschedule</span>
                                             )}
                                         </div>
                                         <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-gray-400">
                                             <span className="flex items-center gap-1.5 text-gray-600"><UserIcon /> {studentName}</span>
-                                            <span className={`flex items-center gap-1.5 uppercase tracking-tighter ${activeTab === 'cancelled' ? 'text-gray-400 line-through' : 'text-[#24985b]'}`}>
+                                            <span className={`flex items-center gap-1.5 uppercase tracking-tighter ${activeTab === 'cancelled' || activeTab === 'past' ? 'text-gray-400' : 'text-[#24985b]'}`}>
                                                 📅 {formatBeautifulDate(b.session_date, b.start_time)}
                                             </span>
-                                            {b.payment_status === 'paid' ? <span className="text-[#24985b] flex items-center gap-1">✓ Paid</span> : <span className="text-orange-500">Unpaid</span>}
+                                            {b.payment_status === 'paid' ? <span className={`${activeTab === 'past' ? 'text-gray-400' : 'text-[#24985b]'} flex items-center gap-1`}>✓ Paid</span> : <span className="text-orange-500">Unpaid</span>}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-4">
                                         {activeTab === 'upcoming' && <span className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-[#eaf6ef] text-[#24985b]">Accepted</span>}
+                                        {activeTab === 'past' && <span className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-gray-100 text-gray-500">Completed</span>}
                                         {activeTab === 'cancelled' && <span className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-50 text-red-500">{b.status}</span>}
                                         {(activeTab === 'pending' || activeTab === 'reschedule') && (
                                             <button
@@ -453,40 +510,54 @@ export default function TutorDashboard() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="flex flex-col sm:flex-row gap-4">
+                                        <div className="flex flex-col sm:flex-row flex-wrap gap-4">
                                             {/* Standard 1-Click Accept */}
-                                            {(selectedBooking.status === 'requested' || isReschedule(selectedBooking)) && (
+                                            {activeTab !== 'past' && (selectedBooking.status === 'requested' || isReschedule(selectedBooking)) && (
                                                 <button
                                                     onClick={() => handleAcceptBooking(selectedBooking)}
-                                                    className="flex-[2] bg-[#24985b] hover:bg-[#1d824d] text-white py-4 rounded-2xl font-bold transition-all shadow-lg shadow-[#24985b]/20"
+                                                    className="flex-[2] min-w-[200px] bg-[#24985b] hover:bg-[#1d824d] text-white py-4 rounded-2xl font-bold transition-all shadow-lg shadow-[#24985b]/20"
                                                 >
                                                     Accept {isReschedule(selectedBooking) ? 'Proposed Time' : 'Booking'}
                                                 </button>
                                             )}
 
-                                            {/* 🚀 FIXED: Button now calls handleOpenReschedulePicker to pre-fill the inputs! */}
-                                            <button
-                                                onClick={handleOpenReschedulePicker}
-                                                className="flex-1 bg-blue-50 text-blue-600 hover:bg-blue-100 py-4 rounded-2xl font-bold transition-all"
-                                            >
-                                                {isReschedule(selectedBooking) ? 'Edit & Accept' : 'Reschedule'}
-                                            </button>
+                                            {/* Reschedule Button */}
+                                            {activeTab !== 'past' && (
+                                                <button
+                                                    onClick={handleOpenReschedulePicker}
+                                                    className="flex-1 min-w-[140px] bg-blue-50 text-blue-600 hover:bg-blue-100 py-4 rounded-2xl font-bold transition-all"
+                                                >
+                                                    {isReschedule(selectedBooking) ? 'Edit & Accept' : 'Reschedule'}
+                                                </button>
+                                            )}
 
+                                            {/* 🚀 NEW: Mark as Paid Button (Appears on Upcoming AND Past if unpaid) */}
+                                            {selectedBooking.payment_status !== 'paid' && selectedBooking.status === 'accepted' && (
+                                                <button
+                                                    onClick={() => handleMarkAsPaid(selectedBooking.id)}
+                                                    className="flex-1 min-w-[140px] bg-[#eaf6ef] text-[#24985b] border-2 border-[#24985b]/20 hover:bg-[#dcf2e6] py-4 rounded-2xl font-bold transition-all"
+                                                >
+                                                    Mark as Paid
+                                                </button>
+                                            )}
+
+                                            {/* 🚀 UPDATED: Decline / Cancel / No-Show Button */}
                                             <button
-                                                onClick={() => handleRejectBooking(selectedBooking.id)}
-                                                className="flex-1 bg-white border-2 border-red-50 text-red-500 hover:bg-red-50 hover:border-red-100 py-4 rounded-2xl font-bold transition-all"
+                                                onClick={() => selectedBooking.status === 'requested' ? handleRejectBooking(selectedBooking.id) : handleCancelLesson(selectedBooking.id)}
+                                                className="flex-1 min-w-[140px] bg-white border-2 border-red-50 text-red-500 hover:bg-red-50 hover:border-red-100 py-4 rounded-2xl font-bold transition-all"
                                             >
-                                                {selectedBooking.status === 'accepted' && !isReschedule(selectedBooking) ? 'Cancel Lesson' : 'Decline'}
+                                                {selectedBooking.status === 'requested' ? 'Decline' : activeTab === 'past' ? 'Cancel / No-Show' : 'Cancel Lesson'}
                                             </button>
                                         </div>
                                     )}
                                 </div>
                             )}
-                        </div>
                     </div>
                 </div>
-            )}
-        </div>
+                </div>
+    )
+}
+        </div >
     );
 }
 
