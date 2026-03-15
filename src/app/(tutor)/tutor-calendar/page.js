@@ -21,6 +21,26 @@ export default function CalendarPage() {
 
     const [baseDate, setBaseDate] = useState(new Date());
 
+    const handleSyncGoogle = async () => {
+        // This is your private trigger for the calendar permissions
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                scopes: 'https://www.googleapis.com/auth/calendar.readonly',
+                redirectTo: `${window.location.origin}/auth/callback`,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                },
+            }
+        });
+
+        if (error) {
+            console.error("Sync Error:", error.message);
+            alert("Failed to start Google Sync: " + error.message);
+        }
+    };
+
     const getWeekDates = (base) => {
         const dayOfWeek = base.getDay();
         const distanceToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -196,9 +216,17 @@ export default function CalendarPage() {
                         {currentViewMonth} • Synced with Google
                     </p>
                 </div>
-                <button onClick={() => setIsAddModalOpen(true)} className="bg-[#24985b] text-white px-8 py-4 rounded-2xl font-black shadow-xl hover:scale-105 transition-all">
-                    + Add Event
-                </button>
+                <div className="flex gap-4">
+                    {/* 🚀 NEW: Your private Sync Button */}
+                    <button onClick={handleSyncGoogle} className="bg-white border-2 border-gray-100 text-gray-600 px-6 py-4 rounded-2xl font-bold shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2">
+                        <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" /></svg>
+                        Sync Google
+                    </button>
+
+                    <button onClick={() => setIsAddModalOpen(true)} className="bg-[#24985b] text-white px-8 py-4 rounded-2xl font-black shadow-xl hover:scale-105 transition-all">
+                        + Add Event
+                    </button>
+                </div>
             </div>
 
             <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
