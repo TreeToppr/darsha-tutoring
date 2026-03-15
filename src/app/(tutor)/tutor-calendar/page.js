@@ -83,10 +83,24 @@ export default function CalendarPage() {
         const user = session?.user;
         if (!user) return;
 
+        // 🚀 NEW FIX: First, find out who this user is in the 'tutors' table!
+        const { data: tutorProfile } = await supabase
+            .from('tutors')
+            .select('id')
+            .eq('profile_id', user.id)
+            .single();
+
+        // If they aren't a registered tutor, stop here.
+        if (!tutorProfile) {
+            setLoading(false);
+            return;
+        }
+
+        // 🚀 THE FIX: Use the actual tutorProfile.id, NOT the user.id
         const { data: localData, error } = await supabase
             .from('bookings')
             .select('*, students(*)')
-            .eq('tutor_id', user.id)
+            .eq('tutor_id', tutorProfile.id)
             .neq('status', 'declined');
 
         if (error) console.error("Local Fetch Error:", error.message);

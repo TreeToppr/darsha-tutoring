@@ -146,7 +146,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                         'Content-Type': 'application/json',
                         'x-google-token': session?.provider_token || ''
                     },
-                    body: JSON.stringify({ tutorId: formData.tutorId, timeMin, timeMax })
+                    body: JSON.stringify({ tutorId: actualTutorId || formData.tutorId, timeMin, timeMax })
                 });
                 // 🚀 THE FIX ENDS HERE
 
