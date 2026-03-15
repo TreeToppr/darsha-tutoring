@@ -104,12 +104,17 @@ export default function SignInPage() {
 
     const handleGoogleSignIn = async (requestCalendar = false) => {
         setLoading(true);
-        const options = {
-            redirectTo: `${window.location.origin}/auth/callback`,
+        setMessage("");
+
+        let options = {
+            redirectTo: typeof window !== "undefined"
+                ? `${window.location.origin}/auth/callback`
+                : undefined,
         };
 
-        // Only add the "scary" stuff if we explicitly pass 'true'
-        if (requestCalendar) {
+        // 🚀 THE FIX: Strictly check for the boolean 'true'. 
+        // This ignores the React Event Object completely.
+        if (requestCalendar === true) {
             options.scopes = 'https://www.googleapis.com/auth/calendar.readonly';
             options.queryParams = {
                 access_type: 'offline',
@@ -161,7 +166,7 @@ export default function SignInPage() {
                         {/* Google */}
                         <button
                             type="button"
-                            onClick={handleGoogleSignIn}
+                            onClick={() => handleGoogleSignIn(false)} // 🚀 EXPLICITLY pass false
                             disabled={loading}
                             style={{
                                 width: "100%",
