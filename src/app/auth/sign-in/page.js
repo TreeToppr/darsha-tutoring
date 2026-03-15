@@ -102,36 +102,25 @@ export default function SignInPage() {
         setLoading(false);
     };
 
-    const handleGoogleSignIn = async () => {
+    const handleGoogleSignIn = async (requestCalendar = false) => {
         setLoading(true);
-        setMessage("");
-
-        // 🚀 THE STRATEGY: 
-        // By default, ask for NO extra scopes. This keeps it "Clean" for Parents.
-        let authOptions = {
-            provider: "google",
-            options: {
-                redirectTo: typeof window !== "undefined"
-                    ? `${window.location.origin}/auth/callback`
-                    : undefined,
-            },
+        const options = {
+            redirectTo: `${window.location.origin}/auth/callback`,
         };
 
-        // 🚀 THE UPGRADE: 
-        // Only if YOU (the tutor) are logging in to sync the calendar, 
-        // we add the scary scopes. You can trigger this by checking the URL 
-        // or just manually adding a "Tutor Login" button.
-        const isTutorLogin = window.location.pathname.includes('tutor');
-
-        if (isTutorLogin) {
-            authOptions.options.scopes = 'https://www.googleapis.com/auth/calendar.readonly';
-            authOptions.options.queryParams = {
+        // Only add the "scary" stuff if we explicitly pass 'true'
+        if (requestCalendar) {
+            options.scopes = 'https://www.googleapis.com/auth/calendar.readonly';
+            options.queryParams = {
                 access_type: 'offline',
                 prompt: 'consent',
             };
         }
 
-        const { error } = await supabase.auth.signInWithOAuth(authOptions);
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: options
+        });
 
         if (error) {
             setMessage(error.message);
