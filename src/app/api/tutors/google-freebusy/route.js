@@ -11,8 +11,16 @@ export async function POST(request) {
     try {
         const { tutorId, timeMin, timeMax } = await request.json();
 
-        // 1. FETCH TUTOR'S PERMANENT REFRESH TOKEN
-        // This allows us to sync even when you are offline
+        // 🚀 THE FIX: Translate the profile_id into the real tutor table ID!
+        const { data: realTutor } = await supabaseAdmin
+            .from('tutors')
+            .select('id')
+            .eq('profile_id', tutorId)
+            .single();
+
+        const actualTutorId = realTutor?.id || tutorId;
+
+        // 1. FETCH TUTOR'S PERMANENT REFRESH TOKEN (Uses profile_id)
         const { data: profile } = await supabaseAdmin
             .from('profiles')
             .select('google_refresh_token')
@@ -22,11 +30,11 @@ export async function POST(request) {
         const liveGoogleToken = request.headers.get('x-google-token');
         let mergedBusyBlocks = [];
 
-        // 2. FETCH LOCAL SUPABASE BOOKINGS
+        // 2. FETCH LOCAL SUPABASE BOOKINGS (Uses actualTutorId)
         const { data: localBookings } = await supabaseAdmin
             .from('bookings')
             .select('session_date, start_time, duration, status')
-            .eq('tutor_id', tutorId)
+            .eq('tutor_id', actualTutorId)
             .neq('status', 'declined');
 
         if (localBookings) {
@@ -48,14 +56,12 @@ export async function POST(request) {
             process.env.GOOGLE_OAUTH_REDIRECT_URI
         );
 
-        // 🚀 THE FIX: Prioritize the Refresh Token for "Always-On" sync
         if (profile?.google_refresh_token) {
             oauth2Client.setCredentials({ refresh_token: profile.google_refresh_token });
         } else if (liveGoogleToken && liveGoogleToken !== 'undefined') {
             oauth2Client.setCredentials({ access_token: liveGoogleToken });
         }
 
-        // Only attempt Google sync if we have some form of credential
         if (oauth2Client.credentials.access_token || oauth2Client.credentials.refresh_token) {
             try {
                 const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
@@ -76,11 +82,11 @@ export async function POST(request) {
             }
         }
 
-        // 4. FETCH TUTOR WORKING HOURS
+        // 4. FETCH TUTOR WORKING HOURS (Uses actualTutorId)
         const { data: workingHours } = await supabaseAdmin
             .from('tutor_availability')
             .select('*')
-            .eq('tutor_id', tutorId);
+            .eq('tutor_id', actualTutorId);
 
         return NextResponse.json({
             busy: mergedBusyBlocks,
