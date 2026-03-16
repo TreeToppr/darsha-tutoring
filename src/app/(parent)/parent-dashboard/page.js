@@ -420,6 +420,36 @@ export default function ParentDashboard() {
                                 </div>
                             </div>
 
+                            <div className="mb-10 p-6 bg-gray-50 border border-gray-100 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4">
+                                <div className="flex items-center gap-4 w-full md:w-auto">
+                                    <div className="w-12 h-12 bg-[#eaf6ef] text-[#24985b] rounded-full flex items-center justify-center font-black text-xl shadow-sm shrink-0">
+                                        {(selectedBooking.tutors?.display_name || selectedBooking.tutors?.profiles?.full_name || 'D')[0]}
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Tutor</p>
+                                        <p className="font-bold text-gray-900">{selectedBooking.tutors?.display_name || selectedBooking.tutors?.profiles?.full_name || 'Darsha'}</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 w-full md:w-auto">
+                                    <a
+                                        href={`mailto:darshatutor@gmail.com?subject=Regarding our lesson on ${new Date(selectedBooking.session_date).toLocaleDateString()}`}
+                                        className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 hover:text-[#24985b] hover:border-[#24985b] px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                        Email
+                                    </a>
+
+                                    <a
+                                        href="tel:+64272341544"
+                                        className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#24985b] hover:bg-[#1d824d] text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md shadow-[#24985b]/20"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                        Text
+                                    </a>
+                                </div>
+                            </div>
+
                             <div className="mb-10">
                                 <h3 className="text-lg font-bold text-gray-900 mb-6">Booking Timeline</h3>
                                 <div className="space-y-6 relative before:absolute before:inset-0 before:ml-3 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
