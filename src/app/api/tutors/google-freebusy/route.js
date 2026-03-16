@@ -11,7 +11,7 @@ export async function POST(request) {
     try {
         const { tutorId, timeMin, timeMax } = await request.json();
 
-        // 🚀 THE FIX: Translate the profile_id into the real tutor table ID!
+        // 🚀 Translate the profile_id into the real tutor table ID!
         const { data: realTutor } = await supabaseAdmin
             .from('tutors')
             .select('id')
@@ -20,7 +20,7 @@ export async function POST(request) {
 
         const actualTutorId = realTutor?.id || tutorId;
 
-        // 1. FETCH TUTOR'S PERMANENT REFRESH TOKEN (Uses profile_id)
+        // 1. FETCH TUTOR'S PERMANENT REFRESH TOKEN
         const { data: profile } = await supabaseAdmin
             .from('profiles')
             .select('google_refresh_token')
@@ -30,11 +30,12 @@ export async function POST(request) {
         const liveGoogleToken = request.headers.get('x-google-token');
         let mergedBusyBlocks = [];
 
-        // 2. FETCH LOCAL SUPABASE BOOKINGS (Uses actualTutorId)
+        // 2. FETCH LOCAL SUPABASE BOOKINGS
+        // 🚀 FIX: Check BOTH IDs using .or() so it catches new bookings AND old ones!
         const { data: localBookings } = await supabaseAdmin
             .from('bookings')
             .select('session_date, start_time, duration, status')
-            .eq('tutor_id', actualTutorId)
+            .or(`tutor_id.eq.${actualTutorId},tutor_id.eq.${tutorId}`)
             .neq('status', 'declined');
 
         if (localBookings) {
@@ -49,7 +50,7 @@ export async function POST(request) {
             });
         }
 
-        // 3. GOOGLE CALENDAR SYNC (Now with Auto-Refresh)
+        // 3. GOOGLE CALENDAR SYNC
         const oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_OAUTH_CLIENT_ID,
             process.env.GOOGLE_OAUTH_CLIENT_SECRET,
@@ -82,11 +83,12 @@ export async function POST(request) {
             }
         }
 
-        // 4. FETCH TUTOR WORKING HOURS (Uses actualTutorId)
+        // 4. FETCH TUTOR WORKING HOURS
+        // 🚀 FIX: Your availability was saved under your profile_id, not your tutor.id! This safely checks both.
         const { data: workingHours } = await supabaseAdmin
             .from('tutor_availability')
             .select('*')
-            .eq('tutor_id', actualTutorId);
+            .or(`tutor_id.eq.${tutorId},tutor_id.eq.${actualTutorId}`);
 
         return NextResponse.json({
             busy: mergedBusyBlocks,
