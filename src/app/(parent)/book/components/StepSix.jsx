@@ -39,48 +39,38 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
         getStudent();
     }, [formData.studentId, formData.studentName]);
 
-    // 1. Helper to get clean YYYY-MM-DD strings
     const getLocalYYYYMMDD = (d) => {
         const pad = (n) => String(n).padStart(2, '0');
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     };
 
-    // 2. Create the "Real Today" string reference 🚀
     const now = new Date();
     const realTodayYYYYMMDD = getLocalYYYYMMDD(now);
-
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // 3. Generate the week columns starting from 'today'
     const weekDays = Array.from({ length: 7 }).map((_, i) => {
         const d = new Date(today);
         d.setDate(today.getDate() + (weekOffset * 7) + i);
         return d;
     });
 
-    // 🚀 THE FIX: Default selection to 'Today' instead of just the first item in the list
     const [selectedDateStr, setSelectedDateStr] = useState(formData.date || realTodayYYYYMMDD);
 
-    // 🚀 NEW: Smart Term Logic
     const getWeeksLeftInTerm = (dateStr) => {
         if (!dateStr) return 1;
         const [yyyy, mm, dd] = dateStr.split('-');
         const selectedDate = new Date(yyyy, mm - 1, dd);
 
-        // 🏫 Edit your school term dates here! (Note: JS Months are 0-indexed. 0=Jan, 1=Feb, etc.)
         const terms = [
-            { start: new Date(2026, 1, 2), end: new Date(2026, 3, 2) },  // Term 1: Feb 2 to Apr 2
-            { start: new Date(2026, 3, 20), end: new Date(2026, 6, 3) },  // Term 2: Apr 20 to Jul 3
-            { start: new Date(2026, 6, 20), end: new Date(2026, 8, 25) }, // Term 3: Jul 20 to Sep 25
-            { start: new Date(2026, 9, 12), end: new Date(2026, 11, 16) } // Term 4: Oct 12 to Dec 16
+            { start: new Date(2026, 1, 2), end: new Date(2026, 3, 2) },
+            { start: new Date(2026, 3, 20), end: new Date(2026, 6, 3) },
+            { start: new Date(2026, 6, 20), end: new Date(2026, 8, 25) },
+            { start: new Date(2026, 9, 12), end: new Date(2026, 11, 16) }
         ];
 
         const currentTerm = terms.find(t => selectedDate >= t.start && selectedDate <= t.end);
-
-        // If they try to book during school holidays, default to a 1-off lesson
         if (!currentTerm) return 1;
 
-        // Calculate exact weeks left from the selected date until term end
         const diffTime = currentTerm.end.getTime() - selectedDate.getTime();
         const diffDays = diffTime / (1000 * 3600 * 24);
         const weeksLeft = Math.floor(diffDays / 7) + 1;
@@ -90,13 +80,12 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
 
     const weeksLeftInTerm = getWeeksLeftInTerm(selectedDateStr);
 
-    // 🚀 NEW: Auto-adjust recurring weeks if they select a date near the end of term
     useEffect(() => {
         if (recurringWeeks !== 1 && recurringWeeks !== 4 && recurringWeeks !== weeksLeftInTerm) {
-            setRecurringWeeks(weeksLeftInTerm); // Keep them glued to "rest of term" if it shifts
+            setRecurringWeeks(weeksLeftInTerm);
         }
         if (recurringWeeks === 4 && weeksLeftInTerm <= 4) {
-            setRecurringWeeks(weeksLeftInTerm); // Downgrade "month" to "rest of term" if term is ending
+            setRecurringWeeks(weeksLeftInTerm);
         }
     }, [selectedDateStr, weeksLeftInTerm, recurringWeeks]);
 
@@ -135,20 +124,17 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                 timeMaxDate.setHours(23, 59, 59);
                 const timeMax = timeMaxDate.toISOString();
 
-                // 🚀 THE FIX STARTS HERE
-                // 1. Grab the session to get the live provider_token from Supabase
                 const { data: { session } } = await supabase.auth.getSession();
 
-                // 2. Pass the 'x-google-token' in the headers
+                // 🚀 FIXED: Safely sending formData.tutorId. The backend handles the rest!
                 const response = await fetch('/api/tutors/google-freebusy', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'x-google-token': session?.provider_token || ''
                     },
-                    body: JSON.stringify({ tutorId: actualTutorId || formData.tutorId, timeMin, timeMax })
+                    body: JSON.stringify({ tutorId: formData.tutorId, timeMin, timeMax })
                 });
-                // 🚀 THE FIX ENDS HERE
 
                 const data = await response.json();
                 if (data.busy) setBusySlots(data.busy);
@@ -173,7 +159,6 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
         const [slotH, slotM] = timeStr.split(':').map(Number);
         const slotStartMins = (slotH * 60) + slotM;
 
-        // Check start_time (underscore)
         const [workStartH, workStartM] = dayRules.start_time.split(':').map(Number);
         const workStartMins = (workStartH * 60) + workStartM;
 
@@ -212,14 +197,12 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("You must be logged in to book.");
 
-            // 🚀 NEW FIX: Translate the profile_id into the real tutor table ID
             const { data: realTutor } = await supabase
                 .from('tutors')
                 .select('id')
                 .eq('profile_id', formData.tutorId)
                 .single();
 
-            // If it finds the real ID, use it. Otherwise, fallback to what we have.
             const actualTutorId = realTutor?.id || formData.tutorId;
 
             const basePrice = formData.price || 70;
@@ -230,7 +213,6 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
             const totalMins = (startHours * 60) + startMins + (formData.duration || 60);
             const endTime = `${Math.floor(totalMins / 60).toString().padStart(2, '0')}:${(totalMins % 60).toString().padStart(2, '0')}`;
 
-            // 🚀 FIX: Safely create the Recurring Group first to satisfy the database constraint
             let recurringGroupId = null;
             if (recurringWeeks > 1) {
                 const { data: groupData, error: groupErr } = await supabase
@@ -270,13 +252,14 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                     payment_status: 'unpaid',
                     lesson_mode: formData.lessonMode.toLowerCase().replace('-', '_'),
                     is_recurring: recurringWeeks > 1,
-                    recurring_group_id: recurringGroupId // 🚀 FIX: Uses the official foreign key!
+                    recurring_group_id: recurringGroupId
                 });
             }
 
             const { data: newBookings, error: insertError } = await supabase.from('bookings').insert(bookingsToInsert).select();
             if (insertError) throw insertError;
 
+            // 🚀 FIXED: Email API successfully uses actualTutorId!
             fetch('/api/email/booking-requested-tutor', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -287,7 +270,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                     date: formData.date,
                     time: formData.time,
                     endTime: endTime,
-                    parentEmail: user.email // Dynamically passing the logged-in parent's email
+                    parentEmail: user.email
                 })
             }).catch(err => console.error("Email notification failed:", err));
 
@@ -302,18 +285,12 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                     throw new Error(result.error || "Failed to get payment URL");
                 }
             } else if (paymentMethod === 'bank_transfer') {
-                // 1. Safely grab the full name directly from your existing formData or fetched state!
                 const nameString = formData.studentName || fetchedStudentName || 'Student';
-
-                // 2. Generate the perfect Reference Code (First Name + Last Initial)
                 const nameParts = nameString.trim().split(' ');
                 const fName = nameParts[0];
                 const lInitial = nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : '';
-
-                // 3. Combine them, and strictly cut it at 12 characters to please NZ banks!
                 const bankRef = `${fName} ${lInitial}`.substring(0, 12).trim();
 
-                // 4. Send that code secretly in the URL to the dashboard
                 router.push(`/parent-dashboard?booking=bank_transfer_pending&ref=${encodeURIComponent(bankRef)}`);
             } else {
                 router.push('/parent-dashboard?booking=success');
@@ -377,7 +354,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                         {weekDays.map((date) => {
                             const dateStr = getLocalYYYYMMDD(date);
                             const isSelectedDay = selectedDateStr === dateStr;
-                            const isActuallyToday = dateStr === realTodayYYYYMMDD; // 🚀 Matches Saturday, Mar 7
+                            const isActuallyToday = dateStr === realTodayYYYYMMDD;
 
                             return (
                                 <button
@@ -388,9 +365,9 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                                     }}
                                     className={`flex-shrink-0 md:flex-shrink w-24 md:w-full py-4 md:py-3 px-4 rounded-xl border-2 transition-all flex flex-col md:flex-row items-center justify-center md:justify-between gap-1 md:gap-4 
                 ${isSelectedDay
-                                            ? 'border-[#24985b] bg-[#eaf6ef] text-[#24985b]' // Selected (Green)
+                                            ? 'border-[#24985b] bg-[#eaf6ef] text-[#24985b]'
                                             : isActuallyToday
-                                                ? 'border-blue-200 bg-blue-50 text-blue-600 shadow-sm' // 🚀 Today (Blue)
+                                                ? 'border-blue-200 bg-blue-50 text-blue-600 shadow-sm'
                                                 : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50 text-gray-600'
                                         }`}
                                 >
@@ -419,12 +396,10 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                     {!isLoadingCalendar && (
                         <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
                             {Object.entries(timeGroups).map(([groupName, slots]) => {
-                                // 🚀 Filter slots: removes morning slots from Wednesday based on your 18:30 start
                                 const validSlots = slots.filter(time =>
                                     isSlotWithinWorkingHours(selectedDateStr, time) && !isSlotBusy(selectedDateStr, time)
                                 );
 
-                                // 🚀 HARD HIDE: If no slots survive the filter, hide the Morning/Afternoon header completely
                                 if (validSlots.length === 0) return null;
 
                                 const isExpanded = expandedGroups[groupName];
@@ -464,7 +439,6 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                         </div>
                     )}
 
-                    {/* 🚀 DYNAMIC RECURRING DROPDOWN */}
                     <div className="mt-8 border-t border-gray-100 pt-6">
                         <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Repeat this lesson?</label>
                         <select
@@ -473,13 +447,9 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                             className="w-full bg-gray-50 border border-gray-100 rounded-xl p-4 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-[#24985b]/20 cursor-pointer"
                         >
                             <option value={1}>No, just a one-off lesson</option>
-
-                            {/* Only show "Monthly" if there are more than 4 weeks left */}
                             {weeksLeftInTerm > 4 && (
                                 <option value={4}>Yes, weekly for a month (4 lessons total)</option>
                             )}
-
-                            {/* Dynamically show "Rest of Term" if there's more than 1 week left */}
                             {weeksLeftInTerm > 1 && (
                                 <option value={weeksLeftInTerm}>
                                     Yes, weekly for the rest of the term ({weeksLeftInTerm} lessons total)
@@ -487,7 +457,6 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                             )}
                         </select>
                     </div>
-
                 </div>
             </div>
 
