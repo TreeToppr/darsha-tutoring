@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
@@ -11,21 +11,67 @@ export default function SignInPage() {
     const [message, setMessage] = useState("");
     const router = useRouter();
 
-    // const signInWithGoogle = async () => {
-    //     await supabase.auth.signInWithOAuth({
-    //         provider: "google",
-    //         options: {
-    //             redirectTo: `${window.location.origin}/auth/callback`,
-    //         },
-    //     });
-    // };
+    // 🚀 THE MAGIC AUTO-ROUTER
+    const routeUserToDashboard = async (userId) => {
+        try {
+            // 1. Check if they are the Tutor (You)
+            const { data: tutorData } = await supabase
+                .from("tutors")
+                .select("id")
+                .eq("profile_id", userId)
+                .single();
+
+            if (tutorData) {
+                console.log("Tutor detected! Routing...");
+                router.push("/tutor-dashboard");
+                return; // Stop here
+            }
+
+            // 2. 🚧 FUTURE V2 UPDATE: Check if they are a Student
+            /*
+            const { data: studentData } = await supabase
+                .from("students")
+                .select("id")
+                .eq("user_id", userId)
+                .single();
+                
+            if (studentData) {
+                console.log("Student detected! Routing...");
+                router.push("/student-dashboard");
+                return;
+            }
+            */
+
+            // 3. Default Fallback: They are a Parent!
+            console.log("Parent detected! Routing...");
+            router.push("/parent-dashboard");
+
+        } catch (error) {
+            console.error("Routing error:", error);
+            // Safe fallback
+            router.push("/parent-dashboard");
+        }
+    };
+
+    // 🚀 Catch Google Logins when they bounce back to the app!
+    useEffect(() => {
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === "SIGNED_IN" && session?.user) {
+                await routeUserToDashboard(session.user.id);
+            }
+        });
+
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
+    }, []);
 
     const handleSignIn = async (e) => {
         e.preventDefault();
         setLoading(true);
         setMessage("");
 
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
@@ -36,70 +82,32 @@ export default function SignInPage() {
             return;
         }
 
-        const {
-            data: { user },
-            error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-            setMessage("Signed in, but could not load user.");
-            setLoading(false);
-            return;
-        }
-
-        let { data: profile, error: profileError } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", user.id)
-            .single();
-
-        if (profileError || !profile) {
-            const fallbackName =
-                user.user_metadata?.full_name ||
-                user.user_metadata?.name ||
-                user.email ||
-                "Parent";
-
-            const fallbackPhone = user.user_metadata?.phone_number || null;
-
-            // Default new users to parent
-            const { error: insertError } = await supabase.from("profiles").insert({
-                id: user.id,
-                role: "parent",
-                full_name: fallbackName,
-                phone_number: fallbackPhone,
-            });
-
-            if (insertError) {
-                setMessage(insertError.message);
-                setLoading(false);
-                return;
-            }
-
-            // Re-load profile after insert
-            const { data: newProfile, error: newProfileError } = await supabase
+        if (data?.user) {
+            // Ensure they have a basic profile before routing
+            const { data: profile } = await supabase
                 .from("profiles")
-                .select("role")
-                .eq("id", user.id)
+                .select("id")
+                .eq("id", data.user.id)
                 .single();
 
-            if (newProfileError || !newProfile) {
-                setMessage("Signed in, but could not load profile.");
-                setLoading(false);
-                return;
+            if (!profile) {
+                const fallbackName =
+                    data.user.user_metadata?.full_name ||
+                    data.user.user_metadata?.name ||
+                    data.user.email.split("@")[0] ||
+                    "Parent";
+
+                await supabase.from("profiles").insert({
+                    id: data.user.id,
+                    role: "parent",
+                    full_name: fallbackName,
+                    phone_number: data.user.user_metadata?.phone_number || null,
+                });
             }
 
-            profile = newProfile;
+            // 🚀 Trigger the magic router!
+            await routeUserToDashboard(data.user.id);
         }
-
-        const role = profile.role;
-
-        if (role === "parent") router.push("/parent-dashboard");
-        else if (role === "tutor") router.push("/tutor-dashboard");
-        else if (role === "admin") router.push("/admin-dashboard");
-        else setMessage("Signed in, but role is unknown.");
-
-        setLoading(false);
     };
 
     const handleGoogleSignIn = async (requestCalendar = false) => {
@@ -112,19 +120,17 @@ export default function SignInPage() {
                 : undefined,
         };
 
-        // 🚀 THE FIX: Strictly check for the boolean 'true'. 
-        // This ignores the React Event Object completely.
         if (requestCalendar === true) {
-            options.scopes = 'https://www.googleapis.com/auth/calendar.readonly';
+            options.scopes = "https://www.googleapis.com/auth/calendar.readonly";
             options.queryParams = {
-                access_type: 'offline',
-                prompt: 'consent',
+                access_type: "offline",
+                prompt: "consent",
             };
         }
 
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
-            options: options
+            options: options,
         });
 
         if (error) {
@@ -166,7 +172,7 @@ export default function SignInPage() {
                         {/* Google */}
                         <button
                             type="button"
-                            onClick={() => handleGoogleSignIn(false)} // 🚀 EXPLICITLY pass false
+                            onClick={() => handleGoogleSignIn(false)}
                             disabled={loading}
                             style={{
                                 width: "100%",
@@ -323,4 +329,3 @@ export default function SignInPage() {
         </main>
     );
 }
-

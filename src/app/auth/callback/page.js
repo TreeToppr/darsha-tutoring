@@ -7,6 +7,47 @@ export default function AuthCallbackPage() {
     const router = useRouter();
     const [message, setMessage] = useState("Securing Connection...");
 
+    // 🚀 The Magic Auto-Router
+    const routeUserToDashboard = async (userId) => {
+        try {
+            // 1. Check if they are the Tutor (You)
+            const { data: tutorData } = await supabase
+                .from('tutors')
+                .select('id')
+                .eq('profile_id', userId)
+                .single();
+
+            if (tutorData) {
+                console.log("Callback: Tutor detected!");
+                router.push('/tutor-dashboard');
+                return;
+            }
+
+            // 2. 🚧 FUTURE V2 UPDATE: Check if they are a Student
+            /*
+            const { data: studentData } = await supabase
+                .from('students')
+                .select('id')
+                .eq('user_id', userId)
+                .single();
+                
+            if (studentData) {
+                console.log("Callback: Student detected!");
+                router.push('/student-dashboard');
+                return;
+            }
+            */
+
+            // 3. Default Fallback: They are a Parent!
+            console.log("Callback: Parent detected!");
+            router.push('/parent-dashboard');
+
+        } catch (error) {
+            console.error("Callback Routing error:", error);
+            router.push('/parent-dashboard');
+        }
+    };
+
     useEffect(() => {
         const run = async () => {
             try {
@@ -25,7 +66,7 @@ export default function AuthCallbackPage() {
 
                 const user = session.user;
 
-                // 3. 🚀 THE NEW FIX: Extract and save the Google Provider Token!
+                // 3. Extract and save the Google Provider Token (Crucial for Tutor Calendar Sync!)
                 const googleRefreshToken = session.provider_refresh_token;
 
                 if (googleRefreshToken) {
@@ -35,14 +76,12 @@ export default function AuthCallbackPage() {
                         .eq('id', user.id);
                 }
 
-                // 4. Ensure profile exists and check role
+                // 4. Ensure profile exists
                 const { data: profile, error: profileError } = await supabase
                     .from("profiles")
-                    .select("role")
+                    .select("id")
                     .eq("id", user.id)
                     .single();
-
-                let role = profile?.role;
 
                 if (profileError || !profile) {
                     const fallbackName = user.user_metadata?.full_name || user.user_metadata?.name || user.email || "Parent";
@@ -56,14 +95,10 @@ export default function AuthCallbackPage() {
                     });
 
                     if (insertError) throw insertError;
-                    role = "parent";
                 }
 
-                // 5. Route them home!
-                if (role === "parent") router.push("/parent-dashboard");
-                else if (role === "tutor") router.push("/tutor-dashboard");
-                else if (role === "admin") router.push("/admin-dashboard");
-                else router.push("/auth/sign-in");
+                // 5. 🚀 Route them using the Magic Auto-Router!
+                await routeUserToDashboard(user.id);
 
             } catch (e) {
                 console.error("Callback Error:", e);
