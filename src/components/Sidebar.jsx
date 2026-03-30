@@ -1,11 +1,12 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Sidebar({ role }) {
     const pathname = usePathname();
+    const router = useRouter();
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -33,6 +34,16 @@ export default function Sidebar({ role }) {
         await supabase.from('notifications').update({ is_read: true }).eq('id', notifId);
     };
 
+    const handleNotificationClick = (e, notif) => {
+        e.preventDefault();
+        handleMarkAsRead(notif.id);
+        setIsDropdownOpen(false);
+
+        if (notif.href) {
+            router.push(notif.href);
+        }
+    };
+
     const parentMenu = [{ label: 'Dashboard', href: '/parent-dashboard' }, { label: 'Students', href: '/students' }, { label: 'Book', href: '/book' }, { label: 'Payments', href: '/parent-payments' }, { label: 'Profile', href: '/parent-profile' }];
     const tutorMenu = [{ label: 'Dashboard', href: '/tutor-dashboard' }, { label: 'Calendar', href: '/tutor-calendar' }, { label: 'Wrap-up', href: '/upload-lesson' }, { label: 'Availability', href: '/availability' }, { label: 'Payments', href: '/tutor-payments' }, { label: 'Profile', href: '/tutor-profile' }];
     const adminMenu = [{ label: 'Dashboard', href: '/admin-dashboard' }, { label: 'Bookings', href: '/bookings' }, { label: 'Tutors', href: '/tutors' }, { label: 'Payments', href: '/admin-payments' }, { label: 'Settings', href: '/settings' }];
@@ -53,12 +64,11 @@ export default function Sidebar({ role }) {
 
     return (
         <>
-            {/* DESKTOP SIDEBAR */}
+            {/* -------------------- DESKTOP VIEW -------------------- */}
             <div className="hidden md:flex w-64 h-screen bg-white border-r border-gray-100 fixed left-0 top-0 flex-col py-8 z-[100]">
-                {/* 🚀 BACKDROP MOVED INSIDE: Now it sits behind the dropdown but stays within the sidebar's layering */}
                 {isDropdownOpen && (
                     <div
-                        className="fixed inset-0 z-[110] bg-black/5"
+                        className="fixed inset-0 z-[110] bg-black/5 backdrop-blur-[1px]"
                         onClick={() => setIsDropdownOpen(false)}
                     ></div>
                 )}
@@ -90,7 +100,7 @@ export default function Sidebar({ role }) {
                                             <a
                                                 key={n.id}
                                                 href={n.href || '#'}
-                                                onClick={() => { handleMarkAsRead(n.id); setIsDropdownOpen(false); }}
+                                                onClick={(e) => handleNotificationClick(e, n)}
                                                 className={`block p-4 transition-colors ${!n.is_read ? 'bg-emerald-50/30' : 'bg-white'} hover:bg-gray-50`}
                                             >
                                                 <div className="flex gap-3 text-left">
@@ -123,10 +133,12 @@ export default function Sidebar({ role }) {
                 </nav>
             </div>
 
+
+            {/* -------------------- MOBILE VIEW -------------------- */}
+
             {/* MOBILE BOTTOM NAV */}
-            <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-[100] shadow-[0_-5px_20px_rgba(0,0,0,0.05)] flex items-center pr-2">
-                {isDropdownOpen && <div className="fixed inset-0 z-[110] bg-black/20" onClick={() => setIsDropdownOpen(false)}></div>}
-                <nav className="flex-1 flex justify-between items-center px-2 py-2 relative z-[120]">
+            <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-[100] shadow-[0_-5px_20px_rgba(0,0,0,0.05)] flex items-center">
+                <nav className="flex-1 flex justify-around items-center px-2 py-2 relative z-[120]">
                     {menuItems.map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                         return (
@@ -137,29 +149,74 @@ export default function Sidebar({ role }) {
                         );
                     })}
                 </nav>
+            </div>
 
-                <div className="relative z-[120]">
-                    <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="p-3 ml-2 rounded-full bg-gray-50 text-gray-400 hover:text-gray-900 transition-all shrink-0 focus:outline-none">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                        {unreadCount > 0 && <span className="absolute top-2 right-2 flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full border-2 border-white">{unreadCount}</span>}
+            {/* FLOATING ACTION BUTTON (FAB) & SHEET FOR MOBILE */}
+            <div className="md:hidden">
+                {/* Full screen backdrop when open */}
+                {isDropdownOpen && (
+                    <div
+                        className="fixed inset-0 z-[110] bg-black/40 backdrop-blur-sm transition-all"
+                        onClick={() => setIsDropdownOpen(false)}
+                    ></div>
+                )}
+
+                {/* The Floating Button */}
+                <div className="fixed bottom-20 right-4 z-[120]">
+                    <button
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className="p-3.5 bg-white rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-gray-100 text-gray-500 hover:text-gray-900 transition-all focus:outline-none relative flex items-center justify-center"
+                    >
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+
+                        {unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full border-2 border-white shadow-sm">
+                                {unreadCount}
+                            </span>
+                        )}
                     </button>
+                </div>
 
-                    {isDropdownOpen && (
-                        <div className="absolute bottom-16 right-2 w-72 bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden z-[130] animate-in zoom-in-95 duration-200">
-                            <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center"><span className="font-black text-gray-900">Notifications</span></div>
-                            <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
-                                {notifications.map(n => (
-                                    <a key={n.id} href={n.href || '#'} onClick={() => { handleMarkAsRead(n.id); setIsDropdownOpen(false); }} className={`block p-4 text-left transition-colors ${!n.is_read ? 'bg-emerald-50/30' : 'bg-white'}`}>
+                {/* The Floating Bottom Sheet Modal */}
+                {isDropdownOpen && (
+                    <div className="fixed bottom-20 left-4 right-4 bg-white rounded-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden z-[130] animate-in slide-in-from-bottom-8 duration-300 flex flex-col max-h-[70vh]">
+                        <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center shrink-0">
+                            <span className="font-black text-gray-900">Notifications</span>
+                            {unreadCount > 0 && <span className="bg-[#24985b] text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">{unreadCount} New</span>}
+                        </div>
+
+                        <div className="overflow-y-auto divide-y divide-gray-50 custom-scrollbar flex-1">
+                            {notifications.length === 0 ? (
+                                <div className="p-10 flex flex-col items-center justify-center text-center">
+                                    <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                                        <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                    </div>
+                                    <p className="text-sm font-bold text-gray-400">You're all caught up! 🎉</p>
+                                </div>
+                            ) : (
+                                notifications.map(n => (
+                                    <a
+                                        key={n.id}
+                                        href={n.href || '#'}
+                                        onClick={(e) => handleNotificationClick(e, n)}
+                                        className={`block p-4 text-left transition-colors ${!n.is_read ? 'bg-emerald-50/30' : 'bg-white'} hover:bg-gray-50`}
+                                    >
                                         <div className="flex gap-3">
                                             {!n.is_read && <div className="w-2 h-2 rounded-full bg-[#24985b] shrink-0 mt-1.5"></div>}
-                                            <div><p className={`text-sm ${!n.is_read ? 'font-black text-gray-900' : 'font-bold text-gray-600'}`}>{n.title}</p><p className="text-xs text-gray-500 mt-0.5">{n.message}</p></div>
+                                            <div>
+                                                <p className={`text-sm ${!n.is_read ? 'font-black text-gray-900' : 'font-bold text-gray-600'}`}>{n.title}</p>
+                                                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{n.message}</p>
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-2">{new Date(n.created_at).toLocaleDateString('en-NZ', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                            </div>
                                         </div>
                                     </a>
-                                ))}
-                            </div>
+                                ))
+                            )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
         </>
     );
