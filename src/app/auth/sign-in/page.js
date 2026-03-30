@@ -14,17 +14,21 @@ export default function SignInPage() {
     // 🚀 THE MAGIC AUTO-ROUTER
     const routeUserToDashboard = async (userId) => {
         try {
-            // 1. Check if they are the Tutor (You)
-            const { data: tutorData } = await supabase
-                .from("tutors")
-                .select("id")
-                .eq("profile_id", userId)
+            // 1. Check the official role in the profiles table
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("role")
+                .eq("id", userId)
                 .single();
 
-            if (tutorData) {
+            if (profile?.role === 'admin') {
+                console.log("Admin detected! Routing...");
+                router.push("/admin-dashboard");
+                return;
+            } else if (profile?.role === 'tutor') {
                 console.log("Tutor detected! Routing...");
                 router.push("/tutor-dashboard");
-                return; // Stop here
+                return;
             }
 
             // 2. 🚧 FUTURE V2 UPDATE: Check if they are a Student
@@ -35,7 +39,7 @@ export default function SignInPage() {
                 .eq("user_id", userId)
                 .single();
                 
-            if (studentData) {
+            if (studentData || profile?.role === 'student') {
                 console.log("Student detected! Routing...");
                 router.push("/student-dashboard");
                 return;

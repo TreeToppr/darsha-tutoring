@@ -12,7 +12,6 @@ export default function ParentPortalLayout({ children }) {
     useEffect(() => {
         const checkAuth = async () => {
             const { data: { user } } = await supabase.auth.getUser();
-
             if (!user) {
                 router.push('/auth/sign-in');
             } else {

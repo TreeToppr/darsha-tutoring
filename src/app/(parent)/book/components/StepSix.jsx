@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
+import { sendNotification } from '../../../../lib/notifications';
 
 export default function StepSix({ formData, updateFormData, prevStep }) {
     const router = useRouter();
@@ -257,7 +258,40 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
             }
 
             const { data: newBookings, error: insertError } = await supabase.from('bookings').insert(bookingsToInsert).select();
-            if (insertError) throw insertError;
+            if (!insertError) {
+                // 🚀 USE THE HELPER (Uses profile ID from formData)
+                await sendNotification(
+                    formData.tutorId,
+                    "New Booking Request! 🎉",
+                    `${studentFirstName} requested a ${formData.subject} lesson.`,
+                    `/bookings/${newBookings[0].id}`
+                );
+            }
+
+            // 🚀 NEW: IN-APP NOTIFICATION FOR THE TUTOR
+            supabase.from('notifications').insert({
+                user_id: formData.tutorId,
+                title: "New Booking Request! 🎉",
+                message: `${studentFirstName} requested a new ${formData.subject} lesson.`,
+                href: `/bookings/${newBookings[0].id}`
+            }).then(({ error }) => {
+                if (error) console.error("Notification error:", error);
+            });
+
+            // 🚀 FIXED: Email API successfully uses actualTutorId!
+            fetch('/api/email/booking-requested-tutor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tutorId: actualTutorId,
+                    studentName: studentFirstName,
+                    subject: formData.subject,
+                    date: formData.date,
+                    time: formData.time,
+                    endTime: endTime,
+                    parentEmail: user.email
+                })
+            }).catch(err => console.error("Email notification failed:", err));
 
             // 🚀 FIXED: Email API successfully uses actualTutorId!
             fetch('/api/email/booking-requested-tutor', {

@@ -4,16 +4,21 @@ import { supabase } from '../lib/supabaseClient';
 
 export default function LandingPage() {
     const [session, setSession] = useState(null);
-    const [dashboardUrl, setDashboardUrl] = useState('/parent-dashboard');
+    const [dashboardUrl, setDashboardUrl] = useState(null); // 🚀 Start as null
 
     useEffect(() => {
-        // Check if the user is already logged in
         async function checkAuth() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 setSession(user);
-                // Grab their role to send them to the right dashboard
-                const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+                // Fetch the actual role from the profiles table
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single();
+
+                // 🚀 Set the correct URL based on role
                 if (profile?.role === 'admin') setDashboardUrl('/admin-dashboard');
                 else if (profile?.role === 'tutor') setDashboardUrl('/tutor-dashboard');
                 else setDashboardUrl('/parent-dashboard');
@@ -21,7 +26,7 @@ export default function LandingPage() {
         }
         checkAuth();
     }, []);
-
+    
     return (
         <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#24985b] selection:text-white">
             {/* 🚀 NAVBAR */}
@@ -61,7 +66,7 @@ export default function LandingPage() {
                         background: "radial-gradient(circle at 50% 50%, #d9b9fc 0%, #bbf7d0 100%)"
                     }}>
 
-                    </div>
+                </div>
 
                 <div className="max-w-4xl mx-auto text-center relative z-10 animate-in slide-in-from-bottom-8 duration-700">
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#eaf6ef] text-[#24985b] font-bold text-xs uppercase tracking-widest mb-6 border border-[#24985b]/20">

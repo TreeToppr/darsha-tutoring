@@ -10,14 +10,18 @@ export default function AuthCallbackPage() {
     // 🚀 The Magic Auto-Router
     const routeUserToDashboard = async (userId) => {
         try {
-            // 1. Check if they are the Tutor (You)
-            const { data: tutorData } = await supabase
-                .from('tutors')
-                .select('id')
-                .eq('profile_id', userId)
+            // 1. Check the official role in the profiles table
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', userId)
                 .single();
 
-            if (tutorData) {
+            if (profile?.role === 'admin') {
+                console.log("Callback: Admin detected!");
+                router.push('/admin-dashboard');
+                return;
+            } else if (profile?.role === 'tutor') {
                 console.log("Callback: Tutor detected!");
                 router.push('/tutor-dashboard');
                 return;
@@ -31,7 +35,7 @@ export default function AuthCallbackPage() {
                 .eq('user_id', userId)
                 .single();
                 
-            if (studentData) {
+            if (studentData || profile?.role === 'student') {
                 console.log("Callback: Student detected!");
                 router.push('/student-dashboard');
                 return;
