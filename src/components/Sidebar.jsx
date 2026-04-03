@@ -131,6 +131,25 @@ export default function Sidebar({ role }) {
                         );
                     })}
                 </nav>
+
+                {/* 🚀 ADDED: Desktop "What's New" Button */}
+                <div className="px-4 mt-auto mb-4">
+                    <Link
+                        href="/updates"
+                        className="group flex items-center gap-3 px-4 py-3.5 rounded-2xl text-purple-600 bg-purple-50 hover:bg-purple-100 transition-all font-bold text-sm border border-purple-100"
+                    >
+                        <div className="relative">
+                            <svg className="w-5 h-5 transition-transform group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                            </svg>
+                            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500"></span>
+                            </span>
+                        </div>
+                        What's New
+                    </Link>
+                </div>
             </div>
 
 
@@ -186,6 +205,27 @@ export default function Sidebar({ role }) {
                             <span className="font-black text-gray-900">Notifications</span>
                             {unreadCount > 0 && <span className="bg-[#24985b] text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">{unreadCount} New</span>}
                         </div>
+
+                        {/* 🚀 ADDED: Mobile "What's New" Banner */}
+                        <Link
+                            href="/updates"
+                            onClick={() => setIsDropdownOpen(false)}
+                            className="bg-purple-50 p-4 border-b border-purple-100 flex items-center justify-between group active:bg-purple-100 transition-colors shrink-0"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="relative">
+                                    <svg className="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                                    </svg>
+                                    <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                                    </span>
+                                </div>
+                                <span className="font-black text-purple-700 text-sm">See What's New!</span>
+                            </div>
+                            <svg className="w-4 h-4 text-purple-300 group-active:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                        </Link>
 
                         <div className="overflow-y-auto divide-y divide-gray-50 custom-scrollbar flex-1">
                             {notifications.length === 0 ? (
