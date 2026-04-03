@@ -604,6 +604,7 @@ export default function ParentDashboard() {
                             <div className="pt-5 border-t border-gray-200">
                                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1">Reference (Important)</p>
                                 <p className="font-black text-purple-600 text-lg">{bankReference}</p>
+                                <p className="text-[11px] text-gray-400 tracking-widest mb-1">(Also located in Students Page if you lose it)</p>
                             </div>
                         </div>
 

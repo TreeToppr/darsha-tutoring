@@ -268,15 +268,17 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                 );
             }
 
-            // 🚀 NEW: IN-APP NOTIFICATION FOR THE TUTOR
-            supabase.from('notifications').insert({
-                user_id: formData.tutorId,
-                title: "New Booking Request! 🎉",
-                message: `${studentFirstName} requested a new ${formData.subject} lesson.`,
-                href: `/bookings/${newBookings[0].id}`
-            }).then(({ error }) => {
-                if (error) console.error("Notification error:", error);
-            });
+            // // Replace the old supabase.from('notifications') block with this:
+            // await fetch('/api/notifications', {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' },
+            //     body: JSON.stringify({
+            //         user_id: "1a24aaf4-f0fb-457e-9e3e-1f182632c851", // Keep whatever variable you had here originally (e.g., actualTutorId)
+            //         title: "New Booking Request! 🎉",
+            //         message: "A new Mathematics lesson was requested.", // Keep your original message variable here
+            //         href: `/bookings/${newBookings[0].id}`
+            //     })
+            // });
 
             // 🚀 FIXED: Email API successfully uses actualTutorId!
             fetch('/api/email/booking-requested-tutor', {
@@ -319,13 +321,17 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                     throw new Error(result.error || "Failed to get payment URL");
                 }
             } else if (paymentMethod === 'bank_transfer') {
-                const nameString = formData.studentName || fetchedStudentName || 'Student';
-                const nameParts = nameString.trim().split(' ');
-                const fName = nameParts[0];
-                const lInitial = nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : '';
-                const bankRef = `${fName} ${lInitial}`.substring(0, 12).trim();
+                // 🚀 NEW: Fetch the actual billing code right before redirecting
+                const { data: studentData } = await supabase
+                    .from('students')
+                    .select('billing_code')
+                    .eq('id', formData.studentId)
+                    .single();
 
-                router.push(`/parent-dashboard?booking=bank_transfer_pending&ref=${encodeURIComponent(bankRef)}`);
+                const properRef = studentData?.billing_code || 'PENDING';
+                
+                // Pass the real code into the URL
+                router.push(`/parent-dashboard?booking=bank_transfer_pending&ref=${properRef}`);
             } else {
                 router.push('/parent-dashboard?booking=success');
             }

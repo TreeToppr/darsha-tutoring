@@ -6,8 +6,6 @@ export default function StudentsPage() {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState({ show: false, student: null });
-
-    // 🚀 FIX: State now explicitly uses full_name
     const [formData, setFormData] = useState({ full_name: '', year_level: '' });
 
     useEffect(() => { fetchStudents(); }, []);
@@ -26,24 +24,48 @@ export default function StudentsPage() {
         e.preventDefault();
         const { data: { user } } = await supabase.auth.getUser();
 
-        // 🚀 FIX: Payload now pushes to full_name, and cleanly converts year_level to an integer
-        const payload = {
-            parent_id: user.id,
-            full_name: formData.full_name,
-            year_level: formData.year_level ? parseInt(formData.year_level) : null
-        };
+        if (modal.student) {
+            // ✏️ EDIT MODE: Update directly via Supabase (We don't want to change their billing code!)
+            const payload = {
+                full_name: formData.full_name,
+                year_level: formData.year_level ? parseInt(formData.year_level) : null
+            };
+            const { error } = await supabase.from('students').update(payload).eq('id', modal.student.id);
 
-        const { error } = modal.student
-            ? await supabase.from('students').update(payload).eq('id', modal.student.id)
-            : await supabase.from('students').insert(payload);
-
-        if (!error) {
-            setFormData({ full_name: '', year_level: '' });
-            setModal({ show: false, student: null });
-            fetchStudents();
+            if (!error) {
+                setFormData({ full_name: '', year_level: '' });
+                setModal({ show: false, student: null });
+                fetchStudents();
+            } else {
+                console.error("Update error:", error);
+                alert("Failed to update student.");
+            }
         } else {
-            console.error("Save error:", error);
-            alert("Failed to save student.");
+            // 🆕 CREATE MODE: Send to secure backend API to generate the unique code
+            try {
+                const res = await fetch('/api/students', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fullName: formData.full_name,
+                        yearLevel: formData.year_level ? parseInt(formData.year_level) : null,
+                        parentId: user.id
+                    })
+                });
+
+                const result = await res.json();
+
+                if (result.success) {
+                    setFormData({ full_name: '', year_level: '' });
+                    setModal({ show: false, student: null });
+                    fetchStudents();
+                } else {
+                    alert("Failed to add student: " + result.error);
+                }
+            } catch (err) {
+                console.error("API error:", err);
+                alert("Something went wrong saving the student.");
+            }
         }
     }
 
@@ -66,30 +88,42 @@ export default function StudentsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {students.map(student => (
-                    <div key={student.id} className="bg-white border border-gray-100 p-8 rounded-[2.5rem] shadow-sm flex items-center justify-between group hover:border-[#24985b] transition-all">
-                        <div className="flex items-center gap-5">
-                            <div className="w-16 h-16 bg-[#eaf6ef] text-[#24985b] rounded-2xl flex items-center justify-center font-black text-2xl uppercase">
-                                {/* 🚀 FIX: Safely pull the first letter of full_name */}
+                    <div key={student.id} className="bg-white border border-gray-100 p-8 rounded-[2.5rem] shadow-sm flex flex-col group hover:border-[#24985b] transition-all relative">
+
+                        <div className="flex items-center gap-5 mb-4">
+                            <div className="w-16 h-16 bg-[#eaf6ef] text-[#24985b] rounded-2xl flex items-center justify-center font-black text-2xl uppercase shrink-0">
                                 {student.full_name?.[0] || 'S'}
                             </div>
                             <div>
-                                {/* 🚀 FIX: Display full_name */}
-                                <h3 className="font-bold text-gray-900 text-lg">{student.full_name}</h3>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Year {student.year_level || 'N/A'}</p>
+                                <h3 className="font-bold text-gray-900 text-lg leading-tight">{student.full_name}</h3>
+                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Year {student.year_level || 'N/A'}</p>
                             </div>
                         </div>
-                        <button
-                            onClick={() => { setFormData({ full_name: student.full_name, year_level: student.year_level || '' }); setModal({ show: true, student: student }); }}
-                            className="text-gray-300 hover:text-[#24985b] font-bold text-xs uppercase tracking-tighter transition-colors"
-                        >
-                            Edit
-                        </button>
+
+                        {/* 🚀 THE NEW BILLING CODE BADGE */}
+                        <div className="mt-auto pt-4 border-t border-gray-50 flex items-center justify-between">
+                            <div>
+                                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">Billing / Username Code</span>
+                                <span className="font-mono font-black text-[#24985b] bg-[#eaf6ef] px-3 py-1.5 rounded-lg text-sm tracking-widest select-all cursor-pointer">
+                                    {student.billing_code || 'PENDING'}
+                                </span>
+                            </div>
+
+                            <button
+                                onClick={() => { setFormData({ full_name: student.full_name, year_level: student.year_level || '' }); setModal({ show: true, student: student }); }}
+                                className="text-gray-300 hover:text-[#24985b] font-bold text-xs uppercase tracking-tighter transition-colors mt-2"
+                            >
+                                Edit
+                            </button>
+                        </div>
+
                     </div>
                 ))}
             </div>
 
+            {/* MODAL REMAINS EXACTLY THE SAME */}
             {modal.show && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
                     <form onSubmit={handleSave} className="bg-white rounded-[2.5rem] p-10 w-full max-w-md shadow-2xl animate-in zoom-in-95">
                         <h2 className="text-2xl font-black mb-6">{modal.student ? 'Edit Student' : 'New Student'}</h2>
                         <div className="space-y-4 mb-8">
@@ -98,7 +132,6 @@ export default function StudentsPage() {
                                 <input
                                     required
                                     value={formData.full_name || ''}
-                                    // 🚀 FIX: Maps input directly to full_name
                                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                                     className="w-full p-4 rounded-2xl bg-gray-50 border-none outline-none focus:ring-2 focus:ring-[#24985b]"
                                     placeholder="Student name..."
@@ -107,7 +140,7 @@ export default function StudentsPage() {
                             <div>
                                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block">Year Level</label>
                                 <input
-                                    type="number" // 🚀 FIX: Ensures they only type a number
+                                    type="number"
                                     value={formData.year_level || ''}
                                     onChange={(e) => setFormData({ ...formData, year_level: e.target.value })}
                                     className="w-full p-4 rounded-2xl bg-gray-50 border-none outline-none focus:ring-2 focus:ring-[#24985b]"
