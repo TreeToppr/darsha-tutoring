@@ -46,7 +46,7 @@ export default function ParentPortalLayout({ children }) {
         <div className="flex min-h-screen bg-gray-50">
             <Sidebar role="parent" />
 
-            {/* 🚀 UPDATED: Made responsive. Added pb-24 so content doesn't hide behind bottom nav */}
+            {/*   UPDATED: Made responsive. Added pb-24 so content doesn't hide behind bottom nav */}
             <main className="flex-1 w-full p-4 md:p-8 lg:p-12 md:ml-64 pb-24 md:pb-8 overflow-y-auto">
                 {children}
             </main>

@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 
 export default function LandingPage() {
     const [session, setSession] = useState(null);
-    const [dashboardUrl, setDashboardUrl] = useState(null); // 🚀 Start as null
+    const [dashboardUrl, setDashboardUrl] = useState(null); //   Start as null
 
     useEffect(() => {
         async function checkAuth() {
@@ -18,7 +18,7 @@ export default function LandingPage() {
                     .eq('id', user.id)
                     .single();
 
-                // 🚀 Set the correct URL based on role
+                //   Set the correct URL based on role
                 if (profile?.role === 'admin') setDashboardUrl('/admin-dashboard');
                 else if (profile?.role === 'tutor') setDashboardUrl('/tutor-dashboard');
                 else setDashboardUrl('/parent-dashboard');
@@ -29,7 +29,7 @@ export default function LandingPage() {
     
     return (
         <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#24985b] selection:text-white">
-            {/* 🚀 NAVBAR */}
+            {/*   NAVBAR */}
             <nav className="fixed w-full top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
                 <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -59,7 +59,7 @@ export default function LandingPage() {
                 </div>
             </nav>
 
-            {/* 🚀 HERO SECTION */}
+            {/*   HERO SECTION */}
             <section className="pt-32 pb-20 lg:pt-48 lg:pb-32 px-6 relative overflow-hidden">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[100%] h-[100%] opacity-40 pointer-events-none"
                     style={{
@@ -94,7 +94,7 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* 🚀 HOW IT WORKS */}
+            {/*   HOW IT WORKS */}
             <section id="how-it-works" className="py-24 bg-gray-50 border-y border-gray-100">
                 <div className="max-w-6xl mx-auto px-6">
                     <div className="text-center mb-16">
@@ -130,7 +130,7 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* 🚀 FEATURES */}
+            {/*   FEATURES */}
             <section id="features" className="py-24">
                 <div className="max-w-6xl mx-auto px-6">
                     <div className="bg-gray-900 rounded-[3rem] p-10 md:p-20 flex flex-col md:flex-row items-center justify-between gap-12 overflow-hidden relative">
@@ -183,7 +183,7 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* 🚀 FOOTER */}
+            {/*   FOOTER */}
             <footer className="bg-white border-t border-gray-100 py-12 text-center">
                 <div className="flex items-center justify-center gap-2 mb-4">
                     <div className="w-6 h-6 bg-[#24985b] rounded flex items-center justify-center text-white font-black text-xs">D</div>

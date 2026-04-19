@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// 🚀 HELPER: Converts a public URL into a file format Gemini can read
+//   HELPER: Converts a public URL into a file format Gemini can read
 async function fetchAsGenerativePart(url) {
     console.log(`Fetching media for AI: ${url}`);
     const response = await fetch(url);

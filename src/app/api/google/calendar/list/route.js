@@ -12,7 +12,7 @@ export async function GET(request) {
         const authHeader = request.headers.get('Authorization');
         const token = authHeader?.replace('Bearer ', '');
 
-        // 🚀 THE FIX: Catch the live Google token from the frontend
+        //   THE FIX: Catch the live Google token from the frontend
         const liveGoogleToken = request.headers.get('x-google-token');
 
         if (!token) {
@@ -31,7 +31,7 @@ export async function GET(request) {
             process.env.GOOGLE_OAUTH_REDIRECT_URI
         );
 
-        // 🚀 THE FIX: Prioritize the live token! If it exists, use it instantly.
+        //   THE FIX: Prioritize the live token! If it exists, use it instantly.
         if (liveGoogleToken) {
             oauth2Client.setCredentials({ access_token: liveGoogleToken });
         } else {

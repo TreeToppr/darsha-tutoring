@@ -29,7 +29,7 @@ export async function proxy(request) {
         }
     );
 
-    // 🚀 THE FIX: 
+    //   THE FIX: 
     // We removed the aggressive server-side redirect logic here.
     // Because your session lives in Local Storage, the client-side `layout.js` 
     // is now 100% in charge of securing your dashboard routes!

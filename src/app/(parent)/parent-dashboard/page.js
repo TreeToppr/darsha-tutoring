@@ -64,7 +64,7 @@ export default function ParentDashboard() {
 
         const { data: bookingData, error } = await supabase
             .from('bookings')
-            .select('*, students(full_name), tutors(display_name, profiles(full_name))')
+            .select('*, meet_link, students(full_name), tutors(display_name, profiles(full_name))')
             .eq('parent_id', user.id)
             .order('session_date', { ascending: true })
             .order('start_time', { ascending: true });
@@ -203,6 +203,9 @@ export default function ParentDashboard() {
 
     if (loading) return <div className="p-8 text-gray-500 font-medium animate-pulse">Loading dashboard...</div>;
 
+    // 🚀 ADD THIS TRACKER:
+    console.log("REACT SEES THIS BOOKING DATA:", selectedBooking);
+
     return (
         <div className="max-w-5xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500 relative">
             <div>
@@ -210,7 +213,7 @@ export default function ParentDashboard() {
                 <p className="text-gray-500 mt-1 md:mt-2 text-sm md:text-base font-medium">Here's what's happening with your lessons</p>
             </div>
 
-            {/* 🚀 UPGRADED: Larger text inside StatCards */}
+            {/*   UPGRADED: Larger text inside StatCards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
                 <StatCard icon={<CalendarIcon />} value={stats.upcoming} label="Upcoming Lessons" />
                 <StatCard icon={<ClockIcon />} value={stats.week} label="This Week" />
@@ -243,7 +246,23 @@ export default function ParentDashboard() {
                         </div>
                     </div>
 
-                    <div className="flex gap-3 mt-6 md:mt-8 relative z-10">
+                    <div className="flex flex-col sm:flex-row gap-3 mt-6 md:mt-8 relative z-10">
+                        {/* 🚀 ADDED: Google Meet Button on the main card! */}
+                        {nextLesson.meet_link && (
+                            <a
+                                href={nextLesson.meet_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex-[2] bg-[#4285F4] text-white py-3.5 md:py-4 rounded-xl md:rounded-2xl text-sm md:text-base font-bold flex items-center justify-center gap-2 hover:bg-[#3367D6] transition-colors shadow-sm"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Open Google Meet
+                            </a>
+                        )}
+
                         <button
                             onClick={() => openModal(nextLesson)}
                             className="flex-1 bg-white text-[#24985b] py-3.5 md:py-4 rounded-xl md:rounded-2xl text-sm md:text-base font-bold flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
@@ -251,7 +270,7 @@ export default function ParentDashboard() {
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                             </svg>
-                            View Details
+                            Details
                         </button>
                     </div>
                 </div>
@@ -283,7 +302,7 @@ export default function ParentDashboard() {
                                 onClick={() => openModal(booking)}
                                 className="p-5 md:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-5 hover:bg-gray-50/50 transition-colors cursor-pointer"
                             >
-                                {/* 🚀 UPGRADED: Larger text for list items */}
+                                {/*   UPGRADED: Larger text for list items */}
                                 <div className="w-full md:w-auto">
                                     <div className="flex justify-between items-start">
                                         <h3 className="font-bold text-gray-900 text-base md:text-lg">{booking.subject} <span className="text-gray-500 font-medium">with {booking.tutors?.display_name || booking.tutors?.profiles?.full_name || 'Tutor'}</span></h3>
@@ -305,7 +324,7 @@ export default function ParentDashboard() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end mt-2 md:mt-0" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end mt-4 md:mt-0" onClick={e => e.stopPropagation()}>
                                     <div className="hidden md:block">
                                         {booking.reschedule_status === 'pending' ? (
                                             <span className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border bg-blue-50 text-blue-700 border-blue-200">Reschedule Pending</span>
@@ -314,11 +333,26 @@ export default function ParentDashboard() {
                                         )}
                                     </div>
 
+                                    {/* 🚀 ADDED: Google Meet Button for List Preview */}
+                                    {booking.meet_link && (
+                                        <a
+                                            href={booking.meet_link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="w-full md:w-auto bg-[#4285F4] text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-[#3367D6] shadow-sm transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                            Join
+                                        </a>
+                                    )}
+
                                     {booking.payment_status === 'unpaid' && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handlePayNow(booking.id); }}
                                             disabled={payingBookingId === booking.id}
-                                            className="w-full md:w-auto bg-[#24985b] text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-[#1d824d] shadow-sm transition-colors disabled:opacity-50"
+                                            className="w-full md:w-auto bg-[#24985b] text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#1d824d] shadow-sm transition-colors disabled:opacity-50"
                                         >
                                             {payingBookingId === booking.id ? 'Redirecting...' : `Pay $${booking.amount_total}`}
                                         </button>
@@ -418,7 +452,21 @@ export default function ParentDashboard() {
                                         {selectedBooking.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
                                     </p>
                                 </div>
+
                             </div>
+                            {selectedBooking.meet_link && (
+                                <a
+                                    href={selectedBooking.meet_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full bg-[#4285F4] text-white py-4 rounded-xl md:rounded-2xl text-sm font-bold shadow-sm hover:bg-[#3367D6] transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    Open Google Meet
+                                </a>
+                            )}
 
                             <div className="mb-10 p-6 bg-gray-50 border border-gray-100 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-4 w-full md:w-auto">
@@ -525,20 +573,23 @@ export default function ParentDashboard() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-6 border-t border-gray-100">
-                                    <button
-                                        onClick={() => { setShowCancelConfirm(false); setShowRescheduleInput(true); }}
-                                        disabled={selectedBooking.reschedule_status === 'pending'}
-                                        className="w-full md:flex-1 bg-[#24985b] text-white py-4 rounded-xl md:rounded-2xl text-sm font-bold shadow-sm hover:bg-[#1d824d] transition-colors disabled:opacity-50"
-                                    >
-                                        {selectedBooking.reschedule_status === 'pending' ? 'Reschedule Pending' : 'Request Reschedule'}
-                                    </button>
-                                    <button
-                                        onClick={() => { setShowRescheduleInput(false); setShowCancelConfirm(true); }}
-                                        className="w-full md:flex-1 bg-white text-red-500 py-4 rounded-xl md:rounded-2xl text-sm font-bold border-2 border-red-50 hover:bg-red-50 transition-colors"
-                                    >
-                                        Cancel Booking
-                                    </button>
+                                <div className="flex flex-col gap-3 md:gap-4 pt-6 border-t border-gray-100">
+
+                                    <div className="flex flex-col md:flex-row gap-3 md:gap-4 w-full">
+                                        <button
+                                            onClick={() => { setShowCancelConfirm(false); setShowRescheduleInput(true); }}
+                                            disabled={selectedBooking.reschedule_status === 'pending'}
+                                            className="w-full md:flex-1 bg-[#24985b] text-white py-4 rounded-xl md:rounded-2xl text-sm font-bold shadow-sm hover:bg-[#1d824d] transition-colors disabled:opacity-50"
+                                        >
+                                            {selectedBooking.reschedule_status === 'pending' ? 'Reschedule Pending' : 'Request Reschedule'}
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowRescheduleInput(false); setShowCancelConfirm(true); }}
+                                            className="w-full md:flex-1 bg-white text-red-500 py-4 rounded-xl md:rounded-2xl text-sm font-bold border-2 border-red-50 hover:bg-red-50 transition-colors"
+                                        >
+                                            Cancel Booking
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -621,7 +672,7 @@ export default function ParentDashboard() {
     );
 }
 
-// 🚀 UPGRADED: Scaled up font sizes and removed the aggressive icon scaling
+//   UPGRADED: Scaled up font sizes and removed the aggressive icon scaling
 function StatCard({ icon, value, label }) {
     return (
         <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">

@@ -48,7 +48,7 @@ export default function StepThree({ formData, updateFormData, nextStep, prevStep
                         // Find the tier where the student's year falls between min and max
                         const applicableTier = rates.find(r => targetYear >= r.min && targetYear <= r.max);
 
-                        // 🚀 If the tutor doesn't have a tier for this year, filter them out!
+                        //   If the tutor doesn't have a tier for this year, filter them out!
                         if (!applicableTier) return false;
 
                         tutor.exactRate = applicableTier.rate;

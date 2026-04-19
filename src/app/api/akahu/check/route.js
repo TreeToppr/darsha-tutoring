@@ -31,7 +31,7 @@ export async function GET() {
             );
         }
 
-        // 🚀 THE FIX: Filter out any outgoing money (withdrawals/purchases) first!
+        //   THE FIX: Filter out any outgoing money (withdrawals/purchases) first!
         const incomingDeposits = data.items.filter(tx => tx.amount > 0);
 
         // Return a clean summary of the 5 most recent INCOMING deposits

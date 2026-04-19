@@ -22,11 +22,11 @@ export default function CalendarPage() {
     const [baseDate, setBaseDate] = useState(new Date());
 
     const handleSyncGoogle = async () => {
-        // This is your private trigger for the calendar permissions
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                scopes: 'https://www.googleapis.com/auth/calendar.readonly',
+                // 🚀 FIXED: Upgraded from readonly to full read/write access!
+                scopes: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events',
                 redirectTo: `${window.location.origin}/auth/callback`,
                 queryParams: {
                     access_type: 'offline',
@@ -59,7 +59,7 @@ export default function CalendarPage() {
     };
     const weekDates = getWeekDates(baseDate);
 
-    // 🚀 THE FIX: Get the local New Zealand date string to prevent the Friday/Saturday drift
+    //   THE FIX: Get the local New Zealand date string to prevent the Friday/Saturday drift
     const getLocalTodayStr = () => {
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
@@ -83,7 +83,7 @@ export default function CalendarPage() {
         const user = session?.user;
         if (!user) return;
 
-        // 🚀 NEW FIX: First, find out who this user is in the 'tutors' table!
+        //   NEW FIX: First, find out who this user is in the 'tutors' table!
         const { data: tutorProfile } = await supabase
             .from('tutors')
             .select('id')
@@ -96,7 +96,7 @@ export default function CalendarPage() {
             return;
         }
 
-        // 🚀 THE FIX: Use the actual tutorProfile.id, NOT the user.id
+        //   THE FIX: Use the actual tutorProfile.id, NOT the user.id
         const { data: localData, error } = await supabase
             .from('bookings')
             .select('*, students(*)')
@@ -109,7 +109,7 @@ export default function CalendarPage() {
 
         if (session.provider_token) {
             try {
-                // 🚀 THE FIX: We pass the live provider_token directly from the browser!
+                //   THE FIX: We pass the live provider_token directly from the browser!
                 const res = await fetch('/api/google/calendar/list', {
                     headers: {
                         'Authorization': `Bearer ${session.access_token}`,
@@ -231,7 +231,7 @@ export default function CalendarPage() {
                     </p>
                 </div>
                 <div className="flex gap-4">
-                    {/* 🚀 NEW: Your private Sync Button */}
+                    {/*   NEW: Your private Sync Button */}
                     <button onClick={handleSyncGoogle} className="bg-white border-2 border-gray-100 text-gray-600 px-6 py-4 rounded-2xl font-bold shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2">
                         <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" /></svg>
                         Sync Google
@@ -272,23 +272,23 @@ export default function CalendarPage() {
                             <div key={day.fullStr} className={`flex flex-col relative h-full ${isToday ? 'bg-blue-50/20' : ''}`}>
                                 {TIMES.map(time => <div key={time} className="h-24 border-b border-gray-50"></div>)}
 
-                                {/* 🚀 FIX: Used .substring(0, 10) to strip hidden timestamps, ensuring dates match exactly */}
+                                {/*   FIX: Used .substring(0, 10) to strip hidden timestamps, ensuring dates match exactly */}
                                 {events.filter(e => e.session_date?.substring(0, 10) === day.fullStr).map(event => {
 
-                                    // 🚀 FIX: Prevent silent crashes if start_time is missing
+                                    //   FIX: Prevent silent crashes if start_time is missing
                                     if (!event.start_time) return null;
 
                                     const [hourStr, minStr] = event.start_time.split(':');
                                     const startHour = parseInt(hourStr) + (parseInt(minStr || '0') / 60);
 
-                                    // 🚀 FIX: Clamp the event so it doesn't render off the grid
+                                    //   FIX: Clamp the event so it doesn't render off the grid
                                     const constrainedHour = Math.max(8, Math.min(21, startHour));
                                     const topPos = (constrainedHour - 8) * 96;
 
                                     const eventDuration = event.duration || 60;
                                     const height = (eventDuration / 60) * 96;
 
-                                    // 🚀 FIX: Now checks full_name for the student correctly
+                                    //   FIX: Now checks full_name for the student correctly
                                     const studentName = event.students?.full_name || event.students?.display_name || event.students?.name || '';
 
                                     const isTutoring = !event.is_personal || event.subject?.toLowerCase().includes('tutoring');
@@ -314,7 +314,7 @@ export default function CalendarPage() {
                                             key={event.id}
                                             onClick={() => openDetails(event)}
                                             style={{ top: `${topPos}px`, height: `${height}px` }}
-                                            // 🚀 FIX: Added z-10 to ensure it sits on top of the grid lines
+                                            //   FIX: Added z-10 to ensure it sits on top of the grid lines
                                             className={`absolute left-1 right-1 p-2 z-10 rounded-xl shadow-sm text-[10px] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] flex flex-col gap-1 text-left transition-all ${styleClasses}`}
                                         >
                                             <div className="flex justify-between items-start gap-1 w-full">

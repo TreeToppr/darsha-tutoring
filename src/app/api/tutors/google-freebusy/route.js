@@ -11,7 +11,7 @@ export async function POST(request) {
     try {
         const { tutorId, timeMin, timeMax } = await request.json();
 
-        // 🚀 Translate the profile_id into the real tutor table ID!
+        //   Translate the profile_id into the real tutor table ID!
         const { data: realTutor } = await supabaseAdmin
             .from('tutors')
             .select('id')
@@ -31,7 +31,7 @@ export async function POST(request) {
         let mergedBusyBlocks = [];
 
         // 2. FETCH LOCAL SUPABASE BOOKINGS
-        // 🚀 FIX: Check BOTH IDs using .or() so it catches new bookings AND old ones!
+        //   FIX: Check BOTH IDs using .or() so it catches new bookings AND old ones!
         const { data: localBookings } = await supabaseAdmin
             .from('bookings')
             .select('session_date, start_time, duration, status')
@@ -84,7 +84,7 @@ export async function POST(request) {
         }
 
         // 4. FETCH TUTOR WORKING HOURS
-        // 🚀 FIX: Your availability was saved under your profile_id, not your tutor.id! This safely checks both.
+        //   FIX: Your availability was saved under your profile_id, not your tutor.id! This safely checks both.
         const { data: workingHours } = await supabaseAdmin
             .from('tutor_availability')
             .select('*')

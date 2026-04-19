@@ -1,10 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
-import { useRouter } from 'next/navigation'; // 🚀 NEW: Need this to redirect after signing out
+import { useRouter } from 'next/navigation'; //   NEW: Need this to redirect after signing out
 
 export default function ProfilePage() {
-    const router = useRouter(); // 🚀 NEW
+    const router = useRouter(); //   NEW
     const [profile, setProfile] = useState({ full_name: '', phone: '', address: '', avatar_url: '', email: '' });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -55,7 +55,7 @@ export default function ProfilePage() {
         }
     };
 
-    // 🚀 NEW: Sign out function
+    //   NEW: Sign out function
     const handleSignOut = async () => {
         await supabase.auth.signOut();
         router.push('/auth/sign-in'); // Redirects them to your login page
@@ -97,7 +97,7 @@ export default function ProfilePage() {
 
                 <div>
                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Phone Number</label>
-                    {/* 🚀 FIX: Swapped .address for .phone */}
+                    {/*   FIX: Swapped .address for .phone */}
                     <input value={profile.phone || ''} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="w-full p-4 rounded-2xl bg-gray-50 border-none font-medium text-gray-900 outline-none focus:ring-2 focus:ring-[#24985b]/20" />
                 </div>
 
@@ -106,7 +106,7 @@ export default function ProfilePage() {
                         {saving ? 'Updating...' : 'Save All Changes'}
                     </button>
 
-                    {/* 🚀 NEW: Sign Out Button */}
+                    {/*   NEW: Sign Out Button */}
                     <button onClick={handleSignOut} className="w-full text-red-500 font-bold py-3 hover:bg-red-50 rounded-[1.5rem] transition-all">
                         Sign Out
                     </button>

@@ -27,7 +27,7 @@ export default function AdminBookingsPage() {
     const [paymentStatus, setPaymentStatus] = useState('paid');
     const [bookingStatus, setBookingStatus] = useState('accepted');
 
-    // 🚀 TAB STATE
+    //   TAB STATE
     const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming', 'past', 'all'
 
     useEffect(() => {
@@ -161,7 +161,7 @@ export default function AdminBookingsPage() {
 
     const formatCurrency = (val) => new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(val);
 
-    // 🚀 FILTERING LOGIC
+    //   FILTERING LOGIC
     const today = new Date().toISOString().split('T')[0];
     const filteredBookings = bookings.filter(b => {
         if (activeTab === 'upcoming') return b.session_date >= today;
@@ -187,7 +187,7 @@ export default function AdminBookingsPage() {
             </div>
 
             <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-                {/* 🚀 TAB SWITCHER HEADER */}
+                {/*   TAB SWITCHER HEADER */}
                 <div className="px-8 pt-8 border-b border-gray-50 bg-gray-50/50">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="font-black text-gray-900 text-xl">Platform Records</h2>

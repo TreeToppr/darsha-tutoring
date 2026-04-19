@@ -132,7 +132,7 @@ export default function Sidebar({ role }) {
                     })}
                 </nav>
 
-                {/* 🚀 ADDED: Desktop "What's New" Button */}
+                {/*   ADDED: Desktop "What's New" Button */}
                 <div className="px-4 mt-auto mb-4">
                     <Link
                         href="/updates"
@@ -206,7 +206,7 @@ export default function Sidebar({ role }) {
                             {unreadCount > 0 && <span className="bg-[#24985b] text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">{unreadCount} New</span>}
                         </div>
 
-                        {/* 🚀 ADDED: Mobile "What's New" Banner */}
+                        {/*   ADDED: Mobile "What's New" Banner */}
                         <Link
                             href="/updates"
                             onClick={() => setIsDropdownOpen(false)}

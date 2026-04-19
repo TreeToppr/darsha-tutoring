@@ -50,7 +50,7 @@ export async function POST(request) {
         const payload = {
             Amount: totalAmount.toFixed(2),
             CurrencyCode: "NZD",
-            MerchantReference: `intent-${intent.id}`, // 🚀 Tells verify.js this is a bulk payment!
+            MerchantReference: `intent-${intent.id}`, //   Tells verify.js this is a bulk payment!
             MerchantHomepageURL: baseUrl,
             SuccessURL: `${baseUrl}/parent-payments?payment=success`,
             FailureURL: `${baseUrl}/parent-payments?payment=failed`,

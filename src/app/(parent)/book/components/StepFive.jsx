@@ -71,7 +71,7 @@ export default function StepFive({ formData, updateFormData, nextStep, prevStep 
                 .eq('id', formData.tutorId)
                 .single();
 
-            // 🚀 THE FIX: If the tutor hasn't set an address, we can't do the math correctly
+            //   THE FIX: If the tutor hasn't set an address, we can't do the math correctly
             const tutorHomeBase = tutorProfile?.home_address;
 
             if (!tutorHomeBase) {
@@ -85,7 +85,7 @@ export default function StepFive({ formData, updateFormData, nextStep, prevStep 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    origin: tutorHomeBase, // 🚀 Now uses your real address!
+                    origin: tutorHomeBase, //   Now uses your real address!
                     destination: address
                 })
             });
@@ -100,7 +100,8 @@ export default function StepFive({ formData, updateFormData, nextStep, prevStep 
                 updateFormData({
                     parentAddress: address,
                     travelTime: data.minutes,
-                    travelFee: data.minutes * 1.00
+                    travelFee: data.minutes * 1.00,
+                    booking_address_text: address
                 });
             } else {
                 setErrorMsg(data.error || "Address not found.");

@@ -11,41 +11,131 @@ export async function POST(request) {
     );
 
     try {
-        // 1. Get Booking + Tutor's Token
-        const { data: booking } = await supabaseAdmin
+        console.log("=== STARTING CALENDAR SYNC ===");
+        console.log("Target Booking ID:", bookingId);
+
+        // Step 1: SAFELY get ONLY the booking first
+        const { data: booking, error: bookingError } = await supabaseAdmin
             .from('bookings')
-            .select('*, students(name), profiles:tutor_id(google_refresh_token)')
+            .select('*')
             .eq('id', bookingId)
             .single();
 
-        if (!booking?.profiles?.google_refresh_token) return NextResponse.json({ error: "No Google Token" });
+        if (bookingError || !booking) {
+            console.log("❌ FAILED TO FETCH BOOKING:", bookingError?.message || "Not found");
+            return NextResponse.json({ error: "Booking not found" });
+        }
 
-        // 2. Setup Google Auth
+        // Step 1.5: Safely get the Student's name
+        const { data: student } = await supabaseAdmin
+            .from('students')
+            .select('name, first_name')
+            .eq('id', booking.student_id)
+            .single();
+
+        const studentName = student?.first_name || student?.name || 'Student';
+
+        // Step 2: BULLETPROOF TOKEN FETCHING
+        const { data: tutorData } = await supabaseAdmin
+            .from('tutors')
+            .select('profile_id')
+            .eq('id', booking.tutor_id)
+            .single();
+
+        const actualProfileId = tutorData?.profile_id || booking.tutor_id;
+
+        const { data: profileData } = await supabaseAdmin
+            .from('profiles')
+            .select('google_refresh_token')
+            .eq('id', actualProfileId)
+            .single();
+
+        const refreshToken = profileData?.google_refresh_token;
+
+        if (!refreshToken) {
+            console.log("❌ FAILED: No Google Token found");
+            return NextResponse.json({ error: "No Google Token" });
+        }
+
+        console.log("1. Google Token FOUND!");
+
+        // Step 3: Setup Google Auth
         const oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_OAUTH_CLIENT_ID,
             process.env.GOOGLE_OAUTH_CLIENT_SECRET,
             process.env.GOOGLE_OAUTH_REDIRECT_URI
         );
-        oauth2Client.setCredentials({ refresh_token: booking.profiles.google_refresh_token });
+        oauth2Client.setCredentials({ refresh_token: refreshToken });
 
         const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-        // 3. Create Event [cite: 2026-01-25]
+        // 🚀 THE FIX: Safely deconstruct the time and rebuild it perfectly for Google
+        const [startHour, startMin] = booking.start_time.split(':').map(Number);
+
+        const cleanStartHour = startHour.toString().padStart(2, '0');
+        const cleanStartMin = startMin.toString().padStart(2, '0');
+        const startTimeString = `${cleanStartHour}:${cleanStartMin}:00`;
+
+        const totalEndMins = (startHour * 60) + startMin + (booking.duration || 60);
+        const endHour = Math.floor(totalEndMins / 60).toString().padStart(2, '0');
+        const endMin = (totalEndMins % 60).toString().padStart(2, '0');
+        const endTimeString = `${endHour}:${endMin}:00`;
+
+        const isOnline = booking.lesson_mode !== 'in_person';
+
+        // 🚀 THE FIX 2: Safely fallback undefined/null values
         const event = {
-            summary: `Tutoring: ${booking.students.name} (${booking.subject})`,
-            location: booking.lesson_mode === 'in_person' ? booking.location : 'Online / Video Call',
-            description: `Duration: ${booking.duration} mins`,
-            start: { dateTime: `${booking.session_date}T${booking.start_time}:00`, timeZone: 'Pacific/Auckland' },
-            end: { dateTime: `${booking.session_date}T${booking.start_time}:00`, timeZone: 'Pacific/Auckland' }, // You'd calculate actual end time here
+            summary: `Tutoring: ${studentName} (${booking.subject || 'Session'})`,
+            location: isOnline ? 'Online / Video Call' : (booking.location || 'TBD'),
+            description: `Duration: ${booking.duration || 60} mins`,
+            start: { dateTime: `${booking.session_date}T${startTimeString}`, timeZone: 'Pacific/Auckland' },
+            end: { dateTime: `${booking.session_date}T${endTimeString}`, timeZone: 'Pacific/Auckland' },
         };
 
-        const res = await calendar.events.insert({ calendarId: 'primary', resource: event });
+        if (isOnline) {
+            console.log("3. Requesting Google Meet Room...");
+            event.conferenceData = {
+                createRequest: {
+                    requestId: `meet-${bookingId}-${Date.now()}`,
+                    conferenceSolutionKey: { type: "hangoutsMeet" }
+                }
+            };
+        }
 
-        // 4. Save the Google Event ID back to Supabase so we can sync updates
-        await supabaseAdmin.from('bookings').update({ google_event_id: res.data.id }).eq('id', bookingId);
+        console.log("4. Sending event to Google...");
+        const res = await calendar.events.insert({
+            calendarId: 'primary',
+            requestBody: event,
+            conferenceDataVersion: 1
+        });
 
-        return NextResponse.json({ success: true });
+        console.log("5. Google Event Created! ID:", res.data.id);
+        const meetLink = res.data.hangoutLink;
+        console.log("6. Google Meet Link:", meetLink || "NONE");
+
+        console.log("7. Saving to Supabase...");
+        const { error: updateError } = await supabaseAdmin
+            .from('bookings')
+            .update({
+                google_event_id: res.data.id,
+                ...(meetLink && { meet_link: meetLink })
+            })
+            .eq('id', bookingId);
+
+        if (updateError) {
+            console.log("❌ SUPABASE UPDATE FAILED:", updateError.message);
+        } else {
+            console.log("✅ SUPABASE UPDATE SUCCESSFUL");
+        }
+
+        console.log("=== CALENDAR SYNC COMPLETE ===");
+
+        return NextResponse.json({ success: true, meetLink });
     } catch (error) {
+        console.error("❌ FATAL CALENDAR SYNC ERROR:", error.message);
+        if (error.response?.data?.error?.message) {
+            console.error("🔍 EXACT GOOGLE ERROR SAYS:", error.response.data.error.message);
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

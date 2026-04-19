@@ -127,7 +127,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
 
                 const { data: { session } } = await supabase.auth.getSession();
 
-                // 🚀 FIXED: Safely sending formData.tutorId. The backend handles the rest!
+                //   FIXED: Safely sending formData.tutorId. The backend handles the rest!
                 const response = await fetch('/api/tutors/google-freebusy', {
                     method: 'POST',
                     headers: {
@@ -185,6 +185,48 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
             return (slotStart < busyEnd && slotEnd > busyStart);
         });
     };
+
+    // 1. ADD THIS HELPER FUNCTION
+    const isSlotAvailable = (dateStr, timeStr) => {
+        return isSlotWithinWorkingHours(dateStr, timeStr) && !isSlotBusy(dateStr, timeStr);
+    };
+
+    // 2. ADD THIS NEW SMART FEATURE
+    useEffect(() => {
+        if (isLoadingCalendar || workingHours.length === 0) return;
+
+        const checkHasSlots = (dateStr) => {
+            const allSlots = [...timeGroups.Morning, ...timeGroups.Afternoon, ...timeGroups.Evening];
+            return allSlots.some(t => isSlotAvailable(dateStr, t));
+        };
+
+        // If the currently selected date has NO available slots
+        if (!checkHasSlots(selectedDateStr)) {
+            // Search the current week for a day that DOES have slots
+            const nextAvailableStr = weekDays.map(d => getLocalYYYYMMDD(d)).find(dStr => checkHasSlots(dStr));
+
+            if (nextAvailableStr) {
+                // We found a day in this week! Jump to it.
+                setSelectedDateStr(nextAvailableStr);
+                updateFormData({ date: nextAvailableStr, time: null });
+
+                // Auto-expand the relevant time groups so they don't have to click
+                const morningSlots = timeGroups.Morning.some(t => isSlotAvailable(nextAvailableStr, t));
+                const afternoonSlots = timeGroups.Afternoon.some(t => isSlotAvailable(nextAvailableStr, t));
+                const eveningSlots = timeGroups.Evening.some(t => isSlotAvailable(nextAvailableStr, t));
+
+                setExpandedGroups({
+                    Morning: morningSlots,
+                    Afternoon: !morningSlots && afternoonSlots, // Open afternoon if no morning
+                    Evening: !morningSlots && !afternoonSlots && eveningSlots // Open evening if nothing else
+                });
+
+            } else if (weekOffset < 4) {
+                // The whole week is booked. Auto-jump to the next week (max 4 weeks out)
+                setWeekOffset(prev => prev + 1);
+            }
+        }
+    }, [isLoadingCalendar, workingHours, busySlots]);
 
     const handleSelectTime = (time) => {
         updateFormData({ date: selectedDateStr, time: time });
@@ -252,6 +294,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                     status: 'requested',
                     payment_status: 'unpaid',
                     lesson_mode: formData.lessonMode.toLowerCase().replace('-', '_'),
+                    booking_address_text: formData.lessonMode === 'in-person' ? formData.parentAddress : null,
                     is_recurring: recurringWeeks > 1,
                     recurring_group_id: recurringGroupId
                 });
@@ -259,13 +302,20 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
 
             const { data: newBookings, error: insertError } = await supabase.from('bookings').insert(bookingsToInsert).select();
             if (!insertError) {
-                // 🚀 USE THE HELPER (Uses profile ID from formData)
+                // USE THE HELPER (Uses profile ID from formData)
                 await sendNotification(
                     formData.tutorId,
                     "New Booking Request! 🎉",
                     `${studentFirstName} requested a ${formData.subject} lesson.`,
                     `/bookings/${newBookings[0].id}`
                 );
+
+                // Instantly sync to Google Calendar to generate the Meet link!
+                await fetch('/api/google/calendar/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookingId: newBookings[0].id })
+                }).catch(err => console.error("Instant calendar sync failed:", err));
             }
 
             // // Replace the old supabase.from('notifications') block with this:
@@ -280,7 +330,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
             //     })
             // });
 
-            // 🚀 FIXED: Email API successfully uses actualTutorId!
+            // Email API successfully uses actualTutorId!
             fetch('/api/email/booking-requested-tutor', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -295,7 +345,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                 })
             }).catch(err => console.error("Email notification failed:", err));
 
-            // 🚀 FIXED: Email API successfully uses actualTutorId!
+            //   FIXED: Email API successfully uses actualTutorId!
             fetch('/api/email/booking-requested-tutor', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -321,7 +371,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                     throw new Error(result.error || "Failed to get payment URL");
                 }
             } else if (paymentMethod === 'bank_transfer') {
-                // 🚀 NEW: Fetch the actual billing code right before redirecting
+                //   NEW: Fetch the actual billing code right before redirecting
                 const { data: studentData } = await supabase
                     .from('students')
                     .select('billing_code')
@@ -329,7 +379,7 @@ export default function StepSix({ formData, updateFormData, prevStep }) {
                     .single();
 
                 const properRef = studentData?.billing_code || 'PENDING';
-                
+
                 // Pass the real code into the URL
                 router.push(`/parent-dashboard?booking=bank_transfer_pending&ref=${properRef}`);
             } else {

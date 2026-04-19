@@ -38,7 +38,7 @@ export async function createManualBookingAsAdmin(newBooking) {
     return { success: true, data };
 }
 
-// 🚀 NEW: Edit an existing booking
+//   NEW: Edit an existing booking
 export async function updateBookingAsAdmin(id, updateData) {
     const { data, error } = await supabaseAdmin
         .from('bookings')
@@ -50,7 +50,7 @@ export async function updateBookingAsAdmin(id, updateData) {
     return { success: true, data };
 }
 
-// 🚀 NEW: Delete a booking completely
+//   NEW: Delete a booking completely
 export async function deleteBookingAsAdmin(id) {
     const { error } = await supabaseAdmin
         .from('bookings')

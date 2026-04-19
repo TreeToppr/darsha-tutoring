@@ -161,7 +161,7 @@ export default function ParentPaymentsPage() {
                 </div>
             </div>
 
-            {/* 🚀 FIXED: Mobile Card Layout vs Desktop Table Layout */}
+            {/*   FIXED: Mobile Card Layout vs Desktop Table Layout */}
             <div className="bg-white rounded-3xl md:rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
 
                 {/* Desktop Table (Hidden on Mobile) */}

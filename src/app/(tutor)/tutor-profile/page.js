@@ -11,7 +11,9 @@ export default function TutorProfile() {
     const [profile, setProfile] = useState({
         full_name: '',
         subjects: [],
-        hourly_rates: [] // 🚀 Now an empty array to hold unlimited custom tiers!
+        hourly_rates: [],
+        home_address: '',
+        avatar_url: '' // 🚀 ADDED: Avatar State
     });
 
     useEffect(() => {
@@ -24,7 +26,8 @@ export default function TutorProfile() {
                         full_name: data.full_name || '',
                         subjects: data.subjects || [],
                         hourly_rates: data.hourly_rates || [],
-                        home_address: data.home_address || '' // 🚀 ADD THIS LINE
+                        home_address: data.home_address || '',
+                        avatar_url: data.avatar_url || '' // 🚀 ADDED: Map DB to State
                     });
                 }
             }
@@ -32,6 +35,34 @@ export default function TutorProfile() {
         }
         loadProfile();
     }, []);
+
+    // 🚀 NEW: The Photo Upload Function
+    const handlePhotoUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // Note: If your bucket is named 'avatars', putting 'avatars/' in the fileName 
+        // creates a subfolder. I'm removing it here to keep your bucket clean!
+        const fileName = `${user.id}-${Date.now()}`;
+
+        console.log("Attempting to upload file:", file.name, "Size:", file.size);
+
+        // Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file);
+
+        if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+            setProfile({ ...profile, avatar_url: publicUrl });
+            await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+            alert("Photo uploaded successfully!");
+        } else {
+            // 🚀 THE FIX: Print the exact database error to the screen!
+            console.error("Supabase Storage Error Details:", uploadError);
+            alert(`Supabase Error: ${uploadError.message}`);
+        }
+    };
+
     const handleUpdate = async () => {
         setSaving(true);
         setMessage('');
@@ -40,21 +71,20 @@ export default function TutorProfile() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("No user found");
 
-            // 🚀 THE FIX: We update ONLY the profiles table to keep it simple and reliable
             const { data, error } = await supabase
                 .from('profiles')
                 .update({
                     full_name: profile.full_name,
                     subjects: profile.subjects,
                     hourly_rates: profile.hourly_rates,
-                    home_address: profile.home_address // 👈 This is the one we need!
+                    home_address: profile.home_address,
+                    avatar_url: profile.avatar_url // 🚀 Ensure it saves with profile updates
                 })
                 .eq('id', user.id)
-                .select(); // This returns the updated data so we can verify it
+                .select();
 
             if (error) throw error;
 
-            console.log("Database updated successfully:", data);
             setMessage('Profile updated successfully!');
         } catch (error) {
             console.error("Update Error:", error.message);
@@ -71,7 +101,6 @@ export default function TutorProfile() {
         else setProfile({ ...profile, subjects: [...current, sub] });
     };
 
-    // 🚀 NEW: Tier Management Functions
     const addTier = () => {
         setProfile({ ...profile, hourly_rates: [...profile.hourly_rates, { min: 1, max: 13, rate: 0 }] });
     };
@@ -94,13 +123,28 @@ export default function TutorProfile() {
     if (loading) return <div className="p-10 text-[#24985b] font-black animate-pulse">Loading Profile...</div>;
 
     return (
-        <div className="max-w-4xl p-8 animate-in fade-in duration-500">
-            <div className="flex justify-between items-end mb-10">
-                <div>
-                    <h1 className="text-4xl font-black text-gray-900 tracking-tight">Profile Settings</h1>
-                    <p className="text-gray-500 mt-2 font-medium">Manage your professional details and rates.</p>
+        <div className="max-w-4xl p-4 md:p-8 animate-in fade-in duration-500 pb-32">
+
+            {/* 🚀 UPDATED HEADER WITH AVATAR */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+                <div className="flex items-center gap-6">
+                    {/* Avatar Upload Circle */}
+                    <div className="relative w-24 h-24 shrink-0">
+                        <div className="w-full h-full bg-gray-50 rounded-full overflow-hidden flex items-center justify-center text-4xl border-4 border-white shadow-lg">
+                            {profile.avatar_url ? <img src={profile.avatar_url} className="w-full h-full object-cover" alt="Profile" /> : "👤"}
+                        </div>
+                        <label className="absolute bottom-0 right-0 bg-[#24985b] text-white p-2 rounded-full cursor-pointer shadow-lg hover:scale-110 transition-all border-2 border-white">
+                            <input type="file" className="hidden" onChange={handlePhotoUpload} accept="image/*" />
+                            <CameraIcon className="w-4 h-4" />
+                        </label>
+                    </div>
+                    <div>
+                        <h1 className="text-4xl font-black text-gray-900 tracking-tight">Profile Settings</h1>
+                        <p className="text-gray-500 mt-2 font-medium">Manage your professional details and rates.</p>
+                    </div>
                 </div>
-                <button onClick={handleSignOut} className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all active:scale-95">
+
+                <button onClick={handleSignOut} className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all active:scale-95 shrink-0">
                     Sign Out
                 </button>
             </div>
@@ -129,7 +173,6 @@ export default function TutorProfile() {
                         />
                     </section>
 
-                    {/* 🚀 NEW: Dynamic Rate Tiers UI */}
                     <section>
                         <div className="flex items-center justify-between mb-3 max-w-2xl">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pricing Tiers</label>
@@ -185,14 +228,14 @@ export default function TutorProfile() {
                         </div>
                     </section>
 
-                    <div className="pt-8 border-t border-gray-50 flex items-center justify-between">
-                        <span className="text-[#24985b] font-bold text-sm bg-[#eaf6ef] px-4 py-2 rounded-lg" style={{ opacity: message ? 1 : 0, transition: 'opacity 0.3s' }}>
+                    <div className="pt-8 border-t border-gray-50 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <span className="text-[#24985b] font-bold text-sm bg-[#eaf6ef] px-4 py-2 rounded-lg order-2 md:order-1" style={{ opacity: message ? 1 : 0, transition: 'opacity 0.3s' }}>
                             {message}
                         </span>
                         <button
                             onClick={handleUpdate}
                             disabled={saving}
-                            className="bg-[#24985b] text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-[#24985b]/20 hover:bg-[#1d824d] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0"
+                            className="w-full md:w-auto bg-[#24985b] text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-[#24985b]/20 hover:bg-[#1d824d] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 order-1 md:order-2"
                         >
                             {saving ? 'Saving...' : 'Save Changes'}
                         </button>
@@ -201,4 +244,9 @@ export default function TutorProfile() {
             </div>
         </div>
     );
+}
+
+// 🚀 Missing Camera Icon Component
+function CameraIcon({ className }) {
+    return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
 }

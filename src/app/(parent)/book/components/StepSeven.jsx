@@ -92,12 +92,12 @@ export default function StepSeven({ selection, tutors, students, prev }) {
                     start_time: startTime,
                     end_time: endTime,
                     duration: selection.duration || 60,
-                    amount_base: baseAmount, // 🚀 Fixed to match your DB schema
-                    amount_travel: travelFee, // 🚀 Fixed to match your DB schema
-                    amount_total: pricePerLesson, // 🚀 Fixed to match your DB schema
+                    amount_base: baseAmount, //   Fixed to match your DB schema
+                    amount_travel: travelFee, //   Fixed to match your DB schema
+                    amount_total: pricePerLesson, //   Fixed to match your DB schema
                     status: 'requested',
-                    payment_status: 'unpaid', // 🚀 Added
-                    payment_method: paymentMethod, // 🚀 Added
+                    payment_status: 'unpaid', //   Added
+                    payment_method: paymentMethod, //   Added
                     lesson_mode: selection.type.toLowerCase().replace('-', '_'),
                     is_recurring: recurringWeeks > 1,
                     recurring_group_id: recurringGroupId

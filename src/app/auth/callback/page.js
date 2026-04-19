@@ -7,7 +7,7 @@ export default function AuthCallbackPage() {
     const router = useRouter();
     const [message, setMessage] = useState("Securing Connection...");
 
-    // 🚀 The Magic Auto-Router
+    //   The Magic Auto-Router
     const routeUserToDashboard = async (userId) => {
         try {
             // 1. Check the official role in the profiles table
@@ -101,7 +101,7 @@ export default function AuthCallbackPage() {
                     if (insertError) throw insertError;
                 }
 
-                // 5. 🚀 Route them using the Magic Auto-Router!
+                // 5.   Route them using the Magic Auto-Router!
                 await routeUserToDashboard(user.id);
 
             } catch (e) {

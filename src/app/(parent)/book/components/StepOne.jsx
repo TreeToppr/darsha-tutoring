@@ -26,7 +26,7 @@ export default function StepOne({ formData, updateFormData, nextStep }) {
     }, []);
 
     const handleSelect = (student) => {
-        // 🚀 FIX: Pass the correct full_name directly from your schema
+        //   FIX: Pass the correct full_name directly from your schema
         updateFormData({ studentId: student.id, studentName: student.full_name || 'Student' });
     };
 
@@ -61,7 +61,7 @@ export default function StepOne({ formData, updateFormData, nextStep }) {
                             >
                                 <div className="flex justify-between items-center">
                                     <div>
-                                        {/* 🚀 FIX: Displaying full_name */}
+                                        {/*   FIX: Displaying full_name */}
                                         <p className={`font-bold text-lg ${isSelected ? 'text-[#24985b]' : 'text-gray-900'}`}>
                                             {student.full_name || 'Unnamed Student'}
                                         </p>

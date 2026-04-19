@@ -17,7 +17,7 @@ export default function TutorBookingDetailPage() {
     const [newDate, setNewDate] = useState('');
     const [newTime, setNewTime] = useState('');
 
-    // 🚀 NEW: Edit Report States
+    //   NEW: Edit Report States
     const [isEditingReport, setIsEditingReport] = useState(false);
     const [editedSummary, setEditedSummary] = useState('');
     const [editedSkills, setEditedSkills] = useState([]);
@@ -60,7 +60,33 @@ export default function TutorBookingDetailPage() {
         });
     };
 
-    // 🚀 NEW: Start Editing
+    // 🚀 NEW: Retroactively generate missing Meet links for older bookings
+    const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+
+    const handleGenerateMeetLink = async () => {
+        setIsGeneratingLink(true);
+        try {
+            const res = await fetch('/api/google/calendar/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookingId: id })
+            });
+
+            if (res.ok) {
+                fetchData(); // Refresh the page to reveal the blue button
+            } else {
+                const data = await res.json();
+                alert("Failed to generate link: " + data.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Error generating link.");
+        } finally {
+            setIsGeneratingLink(false);
+        }
+    };
+
+    //   NEW: Start Editing
     const handleStartEdit = () => {
         setEditedSummary(report.ai_summary || '');
         setEditedSkills(report.ai_skills_analysis || []);
@@ -68,7 +94,7 @@ export default function TutorBookingDetailPage() {
         setIsEditingReport(true);
     };
 
-    // 🚀 NEW: Save Edits
+    //   NEW: Save Edits
     const handleSaveReport = async () => {
         const { error } = await supabase
             .from('lesson_reports')
@@ -86,7 +112,7 @@ export default function TutorBookingDetailPage() {
         }
     };
 
-    // 🚀 NEW: Handle Skill Changes dynamically
+    //   NEW: Handle Skill Changes dynamically
     const handleSkillChange = (index, field, value) => {
         const updatedSkills = [...editedSkills];
         updatedSkills[index][field] = value;
@@ -189,7 +215,7 @@ export default function TutorBookingDetailPage() {
                                     </div>
                                 </Link>
                             ) : isEditingReport ? (
-                                /* 🚀 EDIT MODE UI */
+                                /*   EDIT MODE UI */
                                 <div className="space-y-6 animate-in fade-in duration-300">
                                     <div>
                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Lesson Summary</label>
@@ -242,7 +268,7 @@ export default function TutorBookingDetailPage() {
                                     </div>
                                 </div>
                             ) : (
-                                /* 🚀 READ-ONLY REPORT UI */
+                                /*   READ-ONLY REPORT UI */
                                 <div className="space-y-8 animate-in fade-in duration-500">
                                     <div>
                                         <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Lesson Summary</h4>
@@ -278,7 +304,7 @@ export default function TutorBookingDetailPage() {
                                         </div>
                                     )}
 
-                                    {/* 🚀 CONTROLS */}
+                                    {/*   CONTROLS */}
                                     {!report.is_approved && (
                                         <div className="flex gap-3 pt-4 border-t border-gray-100">
                                             <button onClick={handleStartEdit} className="flex-1 bg-gray-50 text-gray-500 py-4 rounded-2xl font-bold hover:bg-gray-100 transition-colors">Edit Report</button>
@@ -295,6 +321,49 @@ export default function TutorBookingDetailPage() {
 
                 <div className="space-y-4">
                     <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Quick Actions</h2>
+
+                    {/* 📍 LESSON LOCATION / MEET LINK */}
+                    {booking.lesson_mode === 'in-person' || booking.lesson_mode === 'in_person' ? (
+                        <div className="bg-blue-50 border-2 border-blue-100 rounded-2xl p-6 text-left">
+                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">📍 In-Person Location</p>
+                            <p className="text-sm font-bold text-blue-900">
+                                {booking.booking_address_text || "No address provided"}
+                            </p>
+                            {booking.booking_address_text && (
+                                <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(booking.booking_address_text)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block mt-2 text-xs font-black text-blue-600 hover:text-blue-800 transition-colors"
+                                >
+                                    Open in Google Maps ↗
+                                </a>
+                            )}
+                        </div>
+                    ) : booking.meet_link ? (
+                        <a
+                            href={booking.meet_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full bg-[#4285F4] text-white py-4 rounded-2xl font-black shadow-lg shadow-blue-500/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            Open Google Meet
+                        </a>
+                    ) : null}
+
+                    {/* 🚀 BACKFILL BUTTON: Only shows if the link is missing from an old online booking */}
+                    {!booking.meet_link && booking.lesson_mode === 'online' && (
+                        <button
+                            onClick={handleGenerateMeetLink}
+                            disabled={isGeneratingLink}
+                            className="w-full bg-purple-50 text-purple-600 py-4 rounded-2xl font-black border-2 border-purple-100 hover:bg-purple-100 transition-all disabled:opacity-50"
+                        >
+                            {isGeneratingLink ? 'Generating...' : 'Generate Missing Meet Link'}
+                        </button>
+                    )}
 
                     {booking.status === 'requested' && (
                         <button onClick={() => handleStatusUpdate('accepted')} className="w-full bg-[#24985b] text-white py-4 rounded-2xl font-black shadow-lg shadow-[#24985b]/20 hover:scale-[1.02] transition-all">Confirm Booking</button>

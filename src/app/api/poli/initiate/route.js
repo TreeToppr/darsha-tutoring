@@ -27,10 +27,10 @@ export async function GET(request) {
         const payload = {
             Amount: booking.amount_total.toFixed(2),
             CurrencyCode: "NZD",
-            // 🚀 FIX 1: Pass the full UUID formatted exactly how verify.js expects it!
+            //   FIX 1: Pass the full UUID formatted exactly how verify.js expects it!
             MerchantReference: `booking-${booking.id}`,
             MerchantHomepageURL: baseUrl,
-            // 🚀 FIX 2: Redirect them straight back to the payments dashboard so the token is caught!
+            //   FIX 2: Redirect them straight back to the payments dashboard so the token is caught!
             SuccessURL: `${baseUrl}/parent-payments?payment=success`,
             FailureURL: `${baseUrl}/parent-payments?payment=failed`,
             CancellationURL: `${baseUrl}/parent-payments?payment=cancelled`,

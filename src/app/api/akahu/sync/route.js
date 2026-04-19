@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase securely for the backend
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -9,9 +8,8 @@ const supabase = createClient(
 
 export async function GET() {
     try {
-        // ==========================================
-        // 1. FETCH AKAHU TRANSACTIONS
-        // ==========================================
+        console.log("=== STARTING AKAHU AUTO-MATCH SYNC ===");
+
         const appToken = process.env.AKAHU_APP_TOKEN;
         const userToken = process.env.AKAHU_USER_TOKEN;
 
@@ -27,9 +25,6 @@ export async function GET() {
         if (!akahuRes.ok) throw new Error("Failed to fetch from Akahu");
         const akahuData = await akahuRes.json();
 
-        // ==========================================
-        // 2. PREVENT THE "DOUBLE DIP"
-        // ==========================================
         const { data: paidBookings, error: paidErr } = await supabase
             .from('bookings')
             .select('payment_reference')
@@ -40,16 +35,16 @@ export async function GET() {
         const usedTxIds = paidBookings.map(b => b.payment_reference);
         const newDeposits = akahuData.items.filter(tx => tx.amount > 0 && !usedTxIds.includes(tx._id));
 
-        // ==========================================
-        // 3. FETCH UNPAID BOOKINGS & STUDENTS
-        // ==========================================
+        console.log(`Found ${newDeposits.length} fresh bank deposits to check.`);
+
+        // 🚀 THE FIX: Removed the .eq('payment_method', 'bank_transfer') filter!
         const { data: unpaidBookings, error: bookingErr } = await supabase
             .from('bookings')
             .select('*')
-            .eq('payment_status', 'unpaid')
-            .eq('payment_method', 'bank_transfer');
+            .eq('payment_status', 'unpaid');
 
         if (bookingErr) throw bookingErr;
+        console.log(`Found ${unpaidBookings.length} total unpaid bookings in Supabase.`);
 
         const { data: students, error: studentErr } = await supabase
             .from('students')
@@ -57,9 +52,6 @@ export async function GET() {
 
         if (studentErr) throw studentErr;
 
-        // ==========================================
-        // 4. THE FIFO MATCHMAKER (USING NEW BILLING CODES)
-        // ==========================================
         let matchedCount = 0;
         let matchedDetails = [];
 
@@ -68,83 +60,90 @@ export async function GET() {
             const ref = (tx.meta?.reference || '').toLowerCase();
             const part = (tx.meta?.particulars || '').toLowerCase();
             const combinedBankText = `${desc} ${ref} ${part}`;
+            const txAmount = Number(tx.amount);
+
+            console.log(`\n🔍 CHECKING DEPOSIT: $${txAmount} | Text: "${combinedBankText}"`);
 
             let matchedBooking = null;
             let matchedStudentName = "Unknown Student";
 
-            // Loop through students to see if their static billing code is in the bank text
-            for (const student of students) {
-                if (!student.billing_code) continue;
+            const codeMatch = combinedBankText.match(/[a-z]{3}\d{3}/);
+            const extractedCode = codeMatch ? codeMatch[0] : null;
 
-                const expectedCode = student.billing_code.toLowerCase();
+            if (extractedCode) {
+                console.log(`   ➔ 🎯 X-Ray spotted billing code: ${extractedCode.toUpperCase()}`);
 
-                // 🎯 1. THE BULLETPROOF MATCH: Did they use the student's billing code (e.g., SAM436)?
-                if (combinedBankText.includes(expectedCode)) {
+                const student = students.find(s => (s.billing_code || '').toLowerCase() === extractedCode);
 
-                    // Find ALL unpaid bookings for this specific student
+                if (student) {
+                    console.log(`   ➔ 👤 Matched to Student: ${student.full_name}`);
                     const studentUnpaidBookings = unpaidBookings.filter(b => b.student_id === student.id);
+                    console.log(`   ➔ 📖 Student has ${studentUnpaidBookings.length} unpaid bookings.`);
 
                     if (studentUnpaidBookings.length > 0) {
-                        // Sort them chronologically (Oldest first)
                         studentUnpaidBookings.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-                        // Find the oldest booking that matches the deposit amount exactly
-                        const oldestMatchingBooking = studentUnpaidBookings.find(b => b.amount_total === tx.amount);
+                        const oldestMatchingBooking = studentUnpaidBookings.find(b => Number(b.amount_total) === txAmount);
 
                         if (oldestMatchingBooking) {
+                            console.log(`   ➔ ✅ EXACT MATCH FOUND! Lesson ID: ${oldestMatchingBooking.id}`);
                             matchedBooking = oldestMatchingBooking;
                             matchedStudentName = student.full_name || 'Student';
-                            break; // Match found, stop looking through other students
+                        } else {
+                            console.log(`   ➔ ❌ FAIL: Found unpaid bookings, but none matched the exact amount of $${txAmount}`);
+                            // Print out what amounts we DID find to help debug
+                            const amountsFound = studentUnpaidBookings.map(b => b.amount_total).join(', ');
+                            console.log(`      (Bookings found for this student were for: $${amountsFound})`);
                         }
                     }
+                } else {
+                    console.log(`   ➔ ❌ FAIL: Code ${extractedCode.toUpperCase()} not found in students table!`);
                 }
+            } else {
+                console.log(`   ➔ No billing code found in text. Attempting name fallback...`);
+                // Fallback Name Match logic remains the same...
+                for (const student of students) {
+                    const actualName = student.full_name || '';
+                    const nameParts = actualName.split(' ');
+                    const fName = nameParts[0]?.toLowerCase() || '';
+                    const lInitial = nameParts.length > 1 ? nameParts[nameParts.length - 1][0].toLowerCase() : '';
+                    const expectedNameRef = `${fName} ${lInitial}`.trim();
 
-                // 🛟 2. THE FALLBACK MATCH: They forgot the code, but used the Name + Exact Amount
-                const actualName = student.full_name || '';
-                const nameParts = actualName.split(' ');
-                const fName = nameParts[0]?.toLowerCase() || '';
-                const lInitial = nameParts.length > 1 ? nameParts[nameParts.length - 1][0].toLowerCase() : '';
-                const expectedNameRef = `${fName} ${lInitial}`.trim();
+                    if (expectedNameRef && combinedBankText.includes(expectedNameRef)) {
+                        const studentUnpaidBookings = unpaidBookings.filter(b => b.student_id === student.id);
+                        studentUnpaidBookings.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                        const oldestMatchingBooking = studentUnpaidBookings.find(b => Number(b.amount_total) === txAmount);
 
-                if (expectedNameRef && combinedBankText.includes(expectedNameRef)) {
-                    const studentUnpaidBookings = unpaidBookings.filter(b => b.student_id === student.id);
-                    studentUnpaidBookings.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-
-                    const oldestMatchingBooking = studentUnpaidBookings.find(b => b.amount_total === tx.amount);
-
-                    if (oldestMatchingBooking) {
-                        matchedBooking = oldestMatchingBooking;
-                        matchedStudentName = actualName;
-                        break;
+                        if (oldestMatchingBooking) {
+                            console.log(`   ➔ ✅ FALLBACK NAME MATCH FOUND for ${actualName}!`);
+                            matchedBooking = oldestMatchingBooking;
+                            matchedStudentName = actualName;
+                            break;
+                        }
                     }
                 }
             }
 
-            // ==========================================
-            // 5. UPDATE DATABASE WITH AUDIT TRAIL
-            // ==========================================
             if (matchedBooking) {
                 const { error: updateErr } = await supabase
                     .from('bookings')
                     .update({
                         payment_status: 'paid',
                         paid_at: new Date().toISOString(),
-                        payment_reference: tx._id // 🚀 The Akahu ID so it is NEVER used again!
+                        payment_reference: tx._id
                     })
                     .eq('id', matchedBooking.id);
 
                 if (!updateErr) {
                     matchedCount++;
-                    matchedDetails.push(`Deposit of $${tx.amount} safely matched to ${matchedStudentName}'s oldest unpaid lesson.`);
-
-                    // Remove this booking from the array so we don't accidentally pay it twice in the same loop
+                    matchedDetails.push(`Safely matched $${txAmount} to ${matchedStudentName}'s unpaid lesson.`);
                     const indexToRemove = unpaidBookings.findIndex(b => b.id === matchedBooking.id);
                     if (indexToRemove !== -1) unpaidBookings.splice(indexToRemove, 1);
-                } else {
-                    console.error("Failed to update booking in Supabase:", updateErr);
                 }
             }
         }
+
+        console.log("=== AKAHU SYNC FINISHED ===");
 
         return NextResponse.json({
             success: true,

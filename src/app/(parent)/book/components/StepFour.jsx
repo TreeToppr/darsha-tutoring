@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 
 export default function StepFour({ formData, updateFormData, nextStep, prevStep }) {
-    // 🚀 Pull the live rate from Step Three ($30 or $40)
+    //   Pull the live rate from Step Three ($30 or $40)
     const hourlyRate = formData.rate || 60;
 
     const durations = [
@@ -26,7 +26,7 @@ export default function StepFour({ formData, updateFormData, nextStep, prevStep 
         updateFormData({ duration: mins, price: Number(price.toFixed(2)) });
     };
 
-    // 🚀 THE FIX: We ensure the display constants strictly follow the formData
+    //   THE FIX: We ensure the display constants strictly follow the formData
     const currentDuration = formData.duration || 60;
     const currentPrice = formData.price !== undefined ? formData.price : (currentDuration === 30 ? 0 : (currentDuration / 60) * hourlyRate);
 
@@ -77,7 +77,7 @@ export default function StepFour({ formData, updateFormData, nextStep, prevStep 
                             <DollarIcon /> ${hourlyRate}/hr
                         </div>
                     </div>
-                    {/* 🚀 THE FIX: This now points to the dynamically updated currentPrice */}
+                    {/*   THE FIX: This now points to the dynamically updated currentPrice */}
                     <div className="text-[#24985b] font-black text-3xl pt-1">
                         Total: ${Number(currentPrice).toFixed(2)}
                     </div>

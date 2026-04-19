@@ -55,7 +55,7 @@ export default function AdminSettings() {
                     Save All Settings
                 </button>
 
-                {/* 🚀 NEW: Sign Out Button */}
+                {/*   NEW: Sign Out Button */}
                 <button
                     onClick={handleSignOut}
                     className="w-full bg-white border-2 border-red-50 text-red-500 hover:bg-red-50 hover:border-red-100 py-4 rounded-xl font-bold transition-all"
