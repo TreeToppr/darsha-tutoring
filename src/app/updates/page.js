@@ -2,10 +2,31 @@
 import Link from 'next/link';
 
 // 📝 Simply add new objects to the top of this array when you push updates!
+// 📝 Simply add new objects to the top of this array when you push updates!
 const updatesData = [
     {
-        id: 1,
-        version: "v1.1.0",
+        id: 7,
+        version: "v2.1.0",
+        date: "April 20, 2026",
+        title: "The Student Autonomy Update 🎓",
+        description: "We are thrilled to launch the brand new Student Portal! Students can now take charge of their own learning by requesting lessons directly, while parents remain in complete control of the final approval and payment.",
+        added: [
+            "Brand new Student Dashboard with a personalized view of their upcoming schedule.",
+            "Smart Student Booking Wizard that automatically skips steps if only one subject or tutor is available.",
+            "Interactive 'People' directory in the Parent Portal to easily browse and view detailed Tutor profiles.",
+            "Tutors can now upload professional profile avatars."
+        ],
+        updated: [
+            "Tutor pricing profiles upgraded to support an unlimited number of custom pricing tiers.",
+            "The booking calendar now automatically skips ahead to the next available day if the selected date is fully booked."
+        ],
+        fixed: [
+            "Resolved an issue where missing tutor home addresses prevented in-person travel fees from calculating."
+        ]
+    },
+    {
+        id: 6,
+        version: "v2.0.1",
         date: "April 4, 2026",
         title: "Bulletproof Bank Transfers & Smart Sync ⚡",
         description: "We completely overhauled how manual bank transfers work to make sure your payments are instantly tracked, verified, and never lost.",
@@ -19,6 +40,74 @@ const updatesData = [
         ],
         fixed: [
             "Resolved an issue where bank payments had to be manually verified by the tutor."
+        ]
+    },
+    {
+        id: 5,
+        version: "v1.5.0",
+        date: "March 30, 2026",
+        title: "Push Notifications 🔔",
+        description: "Stay in the loop with instant updates! We've rolled out comprehensive notification support across all devices.",
+        added: [
+            "Real-time push notifications now enabled for mobile devices.",
+            "Desktop notifications added to instantly alert you of booking requests or changes."
+        ]
+    },
+    {
+        id: 4,
+        version: "v1.4.2",
+        date: "March 18, 2026",
+        title: "Security & Login Upgrades 🔒",
+        description: "We've tightened up our login flow and laid the groundwork for the upcoming student portal.",
+        added: [
+            "Role-based security routing ensuring parents and tutors are directed to the correct dashboards upon sign-in.",
+            "Backend infrastructure added to support future PIN-based student logins."
+        ]
+    },
+    {
+        id: 3,
+        version: "v1.3.0",
+        date: "March 15, 2026",
+        title: "The Great Calendar Sync 📅",
+        description: "A massive update to our scheduling system ensuring that your DarshaTutor calendar and your personal Google Calendar stay in perfect harmony.",
+        added: [
+            "Full, two-way Google Calendar synchronization for Tutors.",
+            "Student lessons now automatically populate and update directly inside the Tutor's Google Calendar."
+        ],
+        updated: [
+            "Parent Dashboard UI updated to clearly separate 'List View' and 'Calendar View' for upcoming bookings."
+        ],
+        fixed: [
+            "Resolved a bug where cancelled bookings were still appearing on the Parent's calendar.",
+            "Fixed email delivery issues for automated tutor notifications."
+        ]
+    },
+    {
+        id: 2,
+        version: "v1.1.0",
+        date: "February 15, 2026",
+        title: "Flexible Lesson Lengths ⏱️",
+        description: "You asked for more flexibility, and we delivered! You are no longer locked into standard 60-minute blocks.",
+        added: [
+            "Parents can now select custom lesson durations in 15-minute increments (e.g., 45 mins, 90 mins)."
+        ],
+        updated: [
+            "Pricing engine upgraded to dynamically calculate exact costs based on the new custom duration blocks."
+        ],
+        fixed: [
+            "Squashed a bug preventing the POLi payment gateway from verifying transactions correctly after booking."
+        ]
+    },
+    {
+        id: 1,
+        version: "v1.0.0",
+        date: "January 26, 2026",
+        title: "DarshaTutor is Live! 🚀",
+        description: "Welcome to the official launch of the DarshaTutor web platform! We've worked hard to build a seamless booking and payment experience.",
+        added: [
+            "Official launch of the Parent Dashboard and Tutor Management Portal.",
+            "Full integration with the POLi payment gateway for secure, instant bank transfers.",
+            "Automated email notifications for requested, confirmed, and cancelled lessons."
         ]
     }
 ];
@@ -112,9 +201,13 @@ export default function UpdatesPage() {
                 ))}
             </div>
 
-            <div className="mt-12 text-center">
+            <div className="mt-12 flex items-center justify-center gap-6">
+                <Link href="/" className="text-sm font-bold text-gray-400 hover:text-[#24985b] transition-colors">
+                    &larr; Back to Home
+                </Link>
+                {/* Optional: Keep the dashboard link for logged-in parents/tutors! */}
                 <Link href="/parent-dashboard" className="text-sm font-bold text-gray-400 hover:text-[#24985b] transition-colors">
-                    &larr; Back to Dashboard
+                    Dashboard &rarr;
                 </Link>
             </div>
         </div>

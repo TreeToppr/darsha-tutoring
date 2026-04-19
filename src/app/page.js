@@ -40,6 +40,15 @@ export default function LandingPage() {
                     <div className="hidden md:flex items-center gap-8 font-bold text-sm text-gray-500">
                         <a href="#how-it-works" className="hover:text-[#24985b] transition-colors">How it works</a>
                         <a href="#features" className="hover:text-[#24985b] transition-colors">Features</a>
+                        
+                        {/* 🚀 EYE-CATCHING BADGE */}
+                        <a href="/updates" className="flex items-center gap-2 bg-emerald-50 border border-[#24985b]/20 text-[#24985b] px-3 py-1.5 rounded-full hover:bg-[#24985b] hover:text-white transition-all group">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#24985b] opacity-75 group-hover:bg-white"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#24985b] group-hover:bg-white"></span>
+                            </span>
+                            What's New
+                        </a>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -84,11 +93,14 @@ export default function LandingPage() {
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                        <a href="/auth/sign-up" className="w-full sm:w-auto bg-[#24985b] text-white px-8 py-4 rounded-full font-black text-lg shadow-xl shadow-[#24985b]/20 hover:bg-[#1d824d] hover:-translate-y-1 transition-all">
-                            Find a Tutor Today
+                        <a href="/auth/sign-up" className="w-full sm:w-auto bg-[#24985b] text-white px-8 py-4 rounded-full font-black text-lg shadow-xl shadow-[#24985b]/20 hover:bg-[#1d824d] hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
+                            Get Started
                         </a>
-                        <a href="/auth/sign-in" className="w-full sm:w-auto bg-white text-gray-900 border-2 border-gray-100 px-8 py-4 rounded-full font-black text-lg hover:border-gray-200 hover:bg-gray-50 transition-all">
-                            I'm a Tutor
+                        <a href="/auth/sign-in" className="w-full sm:w-auto bg-white text-gray-900 border-2 border-gray-100 px-8 py-4 rounded-full font-black text-lg hover:border-gray-200 hover:bg-gray-50 transition-all flex items-center justify-center gap-2">
+                            Sign In
+                            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                            </svg>
                         </a>
                     </div>
                 </div>
@@ -183,7 +195,7 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/*   FOOTER */}
+            {/* FOOTER */}
             <footer className="bg-white border-t border-gray-100 py-12 text-center">
                 <div className="flex items-center justify-center gap-2 mb-4">
                     <div className="w-6 h-6 bg-[#24985b] rounded flex items-center justify-center text-white font-black text-xs">D</div>
@@ -193,6 +205,7 @@ export default function LandingPage() {
                 <div className="flex items-center justify-center gap-6 text-sm font-bold text-gray-500">
                     <a href="/auth/sign-in" className="hover:text-gray-900 transition-colors">Sign In</a>
                     <a href="/auth/sign-up" className="hover:text-gray-900 transition-colors">Sign Up</a>
+                    <a href="/updates" className="hover:text-[#24985b] transition-colors">What's New</a>
                 </div>
                 <p className="text-xs font-medium text-gray-400 mt-12">© {new Date().getFullYear()} DarshaTutor. All rights reserved.</p>
             </footer>
