@@ -59,11 +59,11 @@ export async function POST(request) {
 
         console.log("1. Google Token FOUND!");
 
-        // 3. Set up Google OAuth Client (WITH the live redirect URI)
+        // Step 3: Setup Google Auth
         const oauth2Client = new google.auth.OAuth2(
-            process.env.GOOGLE_CLIENT_ID,
-            process.env.GOOGLE_CLIENT_SECRET,
-            "https://darsha-tutoring.vercel.app/api/google/oauth/callback" // FORCE the exact live URL here
+            process.env.GOOGLE_OAUTH_CLIENT_ID,     // Keeping your exact variable name
+            process.env.GOOGLE_OAUTH_CLIENT_SECRET, // Keeping your exact variable name
+            "https://darsha-tutoring.vercel.app/api/google/oauth/callback" // FORCE the live URL
         );
         oauth2Client.setCredentials({ refresh_token: refreshToken });
 
