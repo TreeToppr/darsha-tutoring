@@ -35,16 +35,18 @@ export async function GET(request) {
 
         // 3. Update ONLY the refresh token
         // We removed 'google_email' because it's missing from your table
-        const { error: updateError } = await supabaseAdmin
-            .from('profiles')
-            .update({
-                google_refresh_token: tokens.refresh_token
-            })
-            .eq('email', googleUser.email);
+        const updatePayload = {};
+        if (tokens.refresh_token) {
+            updatePayload.google_refresh_token = tokens.refresh_token;
+        }
 
-        if (updateError) {
-            console.error("Database Save Failed:", updateError);
-            throw updateError;
+        if (Object.keys(updatePayload).length > 0) {
+            const { error: updateError } = await supabaseAdmin
+                .from('profiles')
+                .update(updatePayload)
+                .eq('email', googleUser.email);
+
+            if (updateError) throw updateError;
         }
 
         return NextResponse.redirect(`${process.env.APP_BASE_URL}/tutor-dashboard?sync=success`);

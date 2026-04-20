@@ -61,9 +61,9 @@ export async function POST(request) {
 
         // Step 3: Setup Google Auth
         const oauth2Client = new google.auth.OAuth2(
-            process.env.GOOGLE_OAUTH_CLIENT_ID,     // Keeping your exact variable name
-            process.env.GOOGLE_OAUTH_CLIENT_SECRET, // Keeping your exact variable name
-            "https://darsha-tutoring.vercel.app/api/google/oauth/callback" // FORCE the live URL
+            process.env.GOOGLE_OAUTH_CLIENT_ID,
+            process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+            process.env.GOOGLE_OAUTH_REDIRECT_URI
         );
         oauth2Client.setCredentials({ refresh_token: refreshToken });
 
@@ -133,9 +133,10 @@ export async function POST(request) {
         return NextResponse.json({ success: true, meetLink });
     } catch (error) {
         console.error("❌ FATAL CALENDAR SYNC ERROR:", error.message);
-        if (error.response?.data?.error?.message) {
-            console.error("🔍 EXACT GOOGLE ERROR SAYS:", error.response.data.error.message);
-        }
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("❌ FULL ERROR RESPONSE:", error.response?.data);
+        return NextResponse.json(
+            { error: error.message, details: error.response?.data || null },
+            { status: 500 }
+        );
     }
 }
