@@ -32,6 +32,8 @@ export async function GET(request) {
 
         const tokens = await tokenResponse.json();
 
+        console.log('GOOGLE TOKENS:', tokens);
+
         if (!tokenResponse.ok || tokens.error) {
             console.error('Google token exchange failed:', tokens);
             throw new Error(tokens.error_description || tokens.error || 'Token exchange failed');

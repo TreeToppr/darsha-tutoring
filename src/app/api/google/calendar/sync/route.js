@@ -67,6 +67,9 @@ export async function POST(request) {
         );
         oauth2Client.setCredentials({ refresh_token: refreshToken });
 
+        console.log('Stored refresh token exists:', !!refreshToken);
+        console.log('Refresh token preview:', refreshToken ? refreshToken.slice(0, 20) : null);
+
         const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
         // 🚀 THE FIX: Safely deconstruct the time and rebuild it perfectly for Google
