@@ -59,6 +59,12 @@ export async function POST(request) {
 
         console.log("1. Google Token FOUND!");
 
+        console.log("==== GOOGLE SYNC DEBUG ====");
+        console.log("Client ID loaded?", !!process.env.GOOGLE_OAUTH_CLIENT_ID);
+        console.log("Client Secret loaded?", !!process.env.GOOGLE_OAUTH_CLIENT_SECRET);
+        console.log("Refresh Token loaded?", !!refreshToken);
+        console.log("===========================");
+
         // Step 3: Setup Google Auth
         const oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_OAUTH_CLIENT_ID,
