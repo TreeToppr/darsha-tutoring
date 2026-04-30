@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { revalidatePath } from 'next/cache';
 
 export async function GET(request) {
     const { searchParams } = new URL(request.url);
@@ -66,6 +67,8 @@ export async function GET(request) {
                 throw updateError;
             }
         }
+
+        revalidatePath('/tutor-dashboard', 'layout');
 
         return NextResponse.redirect(`${appBaseUrl}/tutor-dashboard?sync=success`);
     } catch (error) {

@@ -56,7 +56,7 @@ export default function StudentBookingWizard() {
             setStudent(studentData);
 
             // Fetch Parent Address to pre-fill In-Person location
-            const { data: parentProfile } = await supabase.from('profiles').select('address').eq('id', studentData.parent_id).single();
+            const { data: parentProfile } = await supabase.from('profiles').select('address').eq('id', studentData.parent_id).maybeSingle();
             const parentSavedAddress = parentProfile?.address || '';
 
             // 2. Get Tutors & Calculate Rates based on Student's Year
@@ -259,10 +259,11 @@ export default function StudentBookingWizard() {
         const travelFee = formData.lessonMode === 'in-person' ? formData.travelFee : 0;
         const totalPrice = formData.price + travelFee;
 
-        const { error } = await supabase.from('bookings').insert([{
+        // 1. We added .select('id').single() to retrieve the generated bookingId
+        const { data: newBooking, error } = await supabase.from('bookings').insert([{
             student_id: student.id,
             parent_id: student.parent_id,
-            tutor_id: formData.tutorTableId, // 🚀 Inserts with correct DB Table ID
+            tutor_id: formData.tutorTableId,
             subject: formData.subject,
             session_date: formData.date,
             start_time: formData.time,
@@ -273,14 +274,29 @@ export default function StudentBookingWizard() {
             amount_total: totalPrice,
             status: 'requested',
             payment_status: 'unpaid',
-            lesson_mode: formData.lessonMode.replace('-', '_'), // 'online' or 'in_person'
+            lesson_mode: formData.lessonMode.replace('-', '_'),
             booking_address_text: formData.lessonMode === 'in-person' ? formData.booking_address_text : null
-        }]);
+        }]).select('id').single();
 
-        if (!error) {
+        if (!error && newBooking) {
+            // 2. Trigger the Google Calendar generation API immediately!
+            try {
+                fetch('/api/bookings/add-to-google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bookingId: newBooking.id,
+                        studentId: student.id // 🚀 Send the student ID to prove who is making the request
+                    })
+                }).catch(err => console.error("Calendar Sync Error:", err));
+            } catch (err) {
+                console.error("Failed to trigger calendar API:", err);
+            }
+
+            // Move to success screen
             setStep(6);
         } else {
-            alert("Error requesting lesson: " + error.message);
+            alert("Error requesting lesson: " + error?.message);
         }
         setLoading(false);
     };

@@ -20,20 +20,48 @@ async function getUserEmail(userId) {
 
 export async function POST(req) {
     try {
-        const parentUserId = await requireUserIdFromBearer(req);
-        const { bookingId } = await req.json();
+        // 1. Safely attempt to get the user ID (This will fail for guest students)
+        let userId = null;
+        try {
+            userId = await requireUserIdFromBearer(req);
+        } catch (err) {
+            // Ignore the "Not signed in" error, we will fallback to checking the payload
+        }
+
+        // 2. Extract both the bookingId AND our new studentId
+        const { bookingId, studentId } = await req.json();
 
         if (!bookingId) return jsonError("Missing bookingId", 400);
 
-        // booking must belong to this parent
         const { data: booking, error: bErr } = await supabaseAdmin
             .from("bookings")
-            .select("id, tutor_id, parent_id, session_date, start_time, end_time, lesson_mode, booking_address_text, status, google_event_id, google_event_link")
+            .select("id, tutor_id, parent_id, student_id, session_date, start_time, end_time, lesson_mode, booking_address_text, status, google_event_id, google_event_link")
             .eq("id", bookingId)
             .single();
 
         if (bErr || !booking) return jsonError("Booking not found", 404);
-        if (booking.parent_id !== parentUserId) return jsonError("Not your booking", 403);
+
+        // 3. 🚀 THE GUEST STUDENT AUTH FIX
+        let isAuthorized = false;
+
+        // Condition A: Caller has a valid Auth Token (Parents)
+        if (userId) {
+            if (booking.parent_id === userId || booking.student_id === userId) {
+                isAuthorized = true;
+            } else {
+                const { data: studentRow } = await supabaseAdmin.from("students").select("profile_id").eq("id", booking.student_id).single();
+                if (studentRow && studentRow.profile_id === userId) {
+                    isAuthorized = true;
+                }
+            }
+        }
+
+        // Condition B: Caller has NO token, but matches the student ID (Guest Students)
+        if (!isAuthorized && studentId && booking.student_id === studentId) {
+            isAuthorized = true;
+        }
+
+        if (!isAuthorized) return jsonError("Not authorized to generate link", 403);
 
         // Don't create calendar events for rejected/cancelled
         const status = String(booking.status || "").toLowerCase();
@@ -59,7 +87,9 @@ export async function POST(req) {
         let accessToken = null;
         try {
             accessToken = await getGoogleAccessTokenForUser(tutor.profile_id);
-        } catch {
+        } catch (err) {
+            // 🚀 NEW: Print the exact reason Google is failing to the terminal!
+            console.error("🚨 GOOGLE TOKEN EXCHANGE ERROR:", err);
             return jsonError("Tutor has not connected Google Calendar", 400);
         }
 
@@ -82,7 +112,18 @@ export async function POST(req) {
             attendees: parentEmail ? [{ email: parentEmail }] : [],
         };
 
-        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all`;
+        // Conditionally request a Google Meet link if the lesson is not in-person
+        if (booking.lesson_mode !== "in_person") {
+            event.conferenceData = {
+                createRequest: {
+                    // Google requires a unique ID for the creation request
+                    requestId: `meet-${bookingId}`,
+                    conferenceSolutionKey: { type: "hangoutsMeet" }
+                }
+            };
+        }
+
+        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all&conferenceDataVersion=1`;
 
         const googleRes = await fetch(url, {
             method: "POST",
@@ -103,20 +144,28 @@ export async function POST(req) {
         }
 
         // Persist link so UI can hide button
+        // 🚀 THE FIX: Use 'meet_link' to match your Supabase column name
         const { error: uErr } = await supabaseAdmin
             .from("bookings")
             .update({
                 google_event_id: json?.id || null,
-                google_event_link: json?.htmlLink || null,
+                meet_link: json?.hangoutLink || json?.htmlLink || null, 
             })
             .eq("id", bookingId);
 
-        if (uErr) return jsonError(`Calendar created, but failed to store event id: ${uErr.message}`, 500);
+        if (uErr) {
+            // 🚀 THIS WILL TELL US EXACTLY WHY IT'S NOT SAVING
+            console.error("🚨 SUPABASE UPDATE ERROR:", uErr);
+            return jsonError(`Calendar created, but failed to store: ${uErr.message}`, 500);
+        }
+
+        // console.log("✅ SUPABASE UPDATE SUCCESS:", updateData);
 
         return NextResponse.json({
             ok: true,
             google_event_id: json?.id || null,
-            google_event_link: json?.htmlLink || null,
+            // Update this line to match your database logic!
+            google_event_link: json?.hangoutLink || json?.htmlLink || null,
             parentEmail,
         });
     } catch (e) {

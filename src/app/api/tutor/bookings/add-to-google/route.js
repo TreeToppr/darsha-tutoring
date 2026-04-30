@@ -71,7 +71,18 @@ export async function POST(req) {
             attendees: parentEmail ? [{ email: parentEmail }] : [],
         };
 
-        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all`;
+        // Conditionally request a Google Meet link if the lesson is not in-person
+        if (booking.lesson_mode !== "in_person") {
+            event.conferenceData = {
+                createRequest: {
+                    // Google requires a unique ID for the creation request
+                    requestId: `meet-${bookingId}`,
+                    conferenceSolutionKey: { type: "hangoutsMeet" }
+                }
+            };
+        }
+
+        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all&conferenceDataVersion=1`;
 
         const googleRes = await fetch(url, {
             method: "POST",
@@ -95,13 +106,15 @@ export async function POST(req) {
             .from("bookings")
             .update({
                 google_event_id: json?.id || null,
-                google_event_link: json?.htmlLink || null,
+                // Save the Meet link if it exists, otherwise fallback to the Calendar page link
+                google_event_link: json?.hangoutLink || json?.htmlLink || null,
             })
             .eq("id", bookingId);
 
         if (uErr) return jsonError(`Calendar created, but failed to store event id: ${uErr.message}`, 500);
 
-        return NextResponse.json({ ok: true, google_event_id: json?.id || null, google_event_link: json?.htmlLink || null });
+        // Update the google_event_link here as well!
+        return NextResponse.json({ ok: true, google_event_id: json?.id || null, google_event_link: json?.hangoutLink || json?.htmlLink || null });
     } catch (e) {
         return jsonError(e?.message || "Failed", 500);
     }

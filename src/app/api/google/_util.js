@@ -12,13 +12,16 @@ export async function requireUserIdFromBearer(req) {
 }
 
 export async function getGoogleAccessTokenForUser(userId) {
-    const { data: conn, error } = await supabaseAdmin
-        .from("google_calendar_connections")
-        .select("refresh_token")
-        .eq("user_id", userId)
+    // 🚀 FIX: Query the 'profiles' table where we actually saved the token
+    const { data: profile, error } = await supabaseAdmin
+        .from("profiles")
+        .select("google_refresh_token")
+        .eq("id", userId)
         .single();
 
-    if (error || !conn?.refresh_token) throw new Error("Google Calendar not connected");
+    if (error || !profile?.google_refresh_token) {
+        throw new Error("Google Calendar not connected (no refresh token found in profiles)");
+    }
 
     const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -29,13 +32,18 @@ export async function getGoogleAccessTokenForUser(userId) {
         body: new URLSearchParams({
             client_id: clientId,
             client_secret: clientSecret,
-            refresh_token: conn.refresh_token,
+            refresh_token: profile.google_refresh_token,
             grant_type: "refresh_token",
         }),
     });
 
     const json = await tokenRes.json();
-    if (!tokenRes.ok) throw new Error(json?.error_description || "Failed to refresh access token");
+
+    // This will now catch that "Bad Request" and tell us exactly what Google didn't like
+    if (!tokenRes.ok) {
+        console.error("Google Refresh API Error:", json);
+        throw new Error(json?.error_description || "Failed to refresh access token");
+    }
 
     return json.access_token;
 }

@@ -44,16 +44,24 @@ export default function Sidebar({ role }) {
         }
     };
 
-    const parentMenu = [{ label: 'Dashboard', href: '/parent-dashboard' }, { label: 'Students', href: '/students' }, { label: 'Book', href: '/book' }, { label: 'Payments', href: '/parent-payments' }, { label: 'Profile', href: '/parent-profile' }];
-    const tutorMenu = [{ label: 'Dashboard', href: '/tutor-dashboard' }, { label: 'Calendar', href: '/tutor-calendar' }, { label: 'Wrap-up', href: '/upload-lesson' }, { label: 'Availability', href: '/availability' }, { label: 'Payments', href: '/tutor-payments' }, { label: 'Profile', href: '/tutor-profile' }];
-    const adminMenu = [{ label: 'Dashboard', href: '/admin-dashboard' }, { label: 'Bookings', href: '/bookings' }, { label: 'Tutors', href: '/tutors' }, { label: 'Payments', href: '/admin-payments' }, { label: 'Settings', href: '/settings' }];
+    // --- MENUS ---
+    const parentMenu = [{ label: 'Dashboard', href: '/parent-dashboard' }, { label: 'People', href: '/students' }, { label: 'Book', href: '/book' }, { label: 'Payments', href: '/parent-payments' }, { label: 'Profile', href: '/parent-profile' }];
+
+    // 🚀 ADDED: 'Students' tab for the Tutor routing to '/tutor-dashboard/people'
+    const tutorMenu = [{ label: 'Dashboard', href: '/tutor-dashboard' }, { label: 'Students', href: '/tutor-dashboard/people' }, { label: 'Calendar', href: '/tutor-calendar' }, { label: 'Wrap-up', href: '/upload-lesson' }, { label: 'Availability', href: '/availability' }, { label: 'Payments', href: '/tutor-payments' }, { label: 'Profile', href: '/tutor-profile' }];
+
+    const adminMenu = [{ label: 'Dashboard', href: '/admin-dashboard' }, { label: 'Bookings', href: '/bookings' }, { label: 'People', href: '/admin-dashboard/people' }, { label: 'Tutors', href: '/tutors' }, { label: 'Payments', href: '/admin-payments' }, { label: 'Settings', href: '/settings' }];
+
     const menuItems = role === 'admin' ? adminMenu : role === 'tutor' ? tutorMenu : parentMenu;
 
+    // --- ICONS ---
     const getIcon = (label, isActive) => {
         const baseClass = `w-6 h-6 md:w-5 md:h-5 md:mr-3 transition-colors mx-auto ${isActive ? 'text-[#24985b]' : 'text-gray-400 group-hover:text-gray-500'}`;
         const name = label.toLowerCase();
+
         if (name.includes('dashboard')) return <svg className={baseClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>;
-        if (name.includes('tutor') || name.includes('student')) return <svg className={baseClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>;
+        // 🚀 FIXED: Added "people" to this check so the Admin and Parent menu icons show up correctly!
+        if (name.includes('tutor') || name.includes('student') || name.includes('people')) return <svg className={baseClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>;
         if (name.includes('availability') || name.includes('calendar')) return <svg className={baseClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>;
         if (name.includes('book')) return <svg className={baseClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>;
         if (name.includes('payment')) return <svg className={baseClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>;
@@ -132,7 +140,6 @@ export default function Sidebar({ role }) {
                     })}
                 </nav>
 
-                {/*   ADDED: Desktop "What's New" Button */}
                 <div className="px-4 mt-auto mb-4">
                     <Link
                         href="/updates"
@@ -152,10 +159,7 @@ export default function Sidebar({ role }) {
                 </div>
             </div>
 
-
             {/* -------------------- MOBILE VIEW -------------------- */}
-
-            {/* MOBILE BOTTOM NAV */}
             <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-[100] shadow-[0_-5px_20px_rgba(0,0,0,0.05)] flex items-center">
                 <nav className="flex-1 flex justify-around items-center px-2 py-2 relative z-[120]">
                     {menuItems.map((item) => {
@@ -170,9 +174,7 @@ export default function Sidebar({ role }) {
                 </nav>
             </div>
 
-            {/* FLOATING ACTION BUTTON (FAB) & SHEET FOR MOBILE */}
             <div className="md:hidden">
-                {/* Full screen backdrop when open */}
                 {isDropdownOpen && (
                     <div
                         className="fixed inset-0 z-[110] bg-black/40 backdrop-blur-sm transition-all"
@@ -180,7 +182,6 @@ export default function Sidebar({ role }) {
                     ></div>
                 )}
 
-                {/* The Floating Button */}
                 <div className="fixed bottom-20 right-4 z-[120]">
                     <button
                         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -198,7 +199,6 @@ export default function Sidebar({ role }) {
                     </button>
                 </div>
 
-                {/* The Floating Bottom Sheet Modal */}
                 {isDropdownOpen && (
                     <div className="fixed bottom-20 left-4 right-4 bg-white rounded-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden z-[130] animate-in slide-in-from-bottom-8 duration-300 flex flex-col max-h-[70vh]">
                         <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center shrink-0">
@@ -206,7 +206,6 @@ export default function Sidebar({ role }) {
                             {unreadCount > 0 && <span className="bg-[#24985b] text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">{unreadCount} New</span>}
                         </div>
 
-                        {/*   ADDED: Mobile "What's New" Banner */}
                         <Link
                             href="/updates"
                             onClick={() => setIsDropdownOpen(false)}

@@ -17,6 +17,10 @@ export async function GET() {
         ].join(' '),
     };
 
+    console.log("--- OAUTH START DEBUG ---");
+    console.log("USING CLIENT ID:", process.env.GOOGLE_OAUTH_CLIENT_ID);
+    console.log("USING REDIRECT URI:", process.env.GOOGLE_OAUTH_REDIRECT_URI);
+
     const qs = new URLSearchParams(options);
     return NextResponse.redirect(`${rootUrl}?${qs.toString()}`);
 }

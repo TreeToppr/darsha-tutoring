@@ -51,15 +51,14 @@ export default function PeoplePage() {
         e.preventDefault();
         const { data: { user } } = await supabase.auth.getUser();
 
-        const payload = {
-            full_name: formData.full_name,
-            year_level: formData.year_level ? parseInt(formData.year_level) : null,
-            can_student_book: formData.can_student_book,
-            custom_hourly_rate: formData.custom_hourly_rate ? parseFloat(formData.custom_hourly_rate) : null
-        };
-
         if (modal.student) {
-            const { error } = await supabase.from('students').update(payload).eq('id', modal.student.id);
+            // Edit existing student
+            const { error } = await supabase.from('students').update({
+                full_name: formData.full_name,
+                year_level: formData.year_level ? parseInt(formData.year_level) : null,
+                can_student_book: formData.can_student_book
+            }).eq('id', modal.student.id);
+
             if (!error) {
                 closeModal();
                 fetchAllData();
@@ -67,23 +66,37 @@ export default function PeoplePage() {
                 alert("Update error: " + error.message);
             }
         } else {
+            // Create NEW student
             try {
                 const res = await fetch('/api/students', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...payload, parentId: user.id })
+                    // 🚀 MATCHING THE BACKEND EXACTLY:
+                    body: JSON.stringify({
+                        fullName: formData.full_name,
+                        yearLevel: formData.year_level ? parseInt(formData.year_level) : null,
+                        parentId: user.id,
+                        can_student_book: formData.can_student_book
+                    })
                 });
+
                 const result = await res.json();
-                if (result.success) {
+
+                if (result.success || res.ok) {
                     closeModal();
                     fetchAllData();
+                } else {
+                    alert("Backend API Error: " + (result.error || "Missing required fields"));
                 }
-            } catch (err) { alert("Error saving student."); }
+            } catch (err) {
+                alert("Network error while saving student.");
+            }
         }
     }
 
     const closeModal = () => {
-        setFormData({ full_name: '', year_level: '', can_student_book: false, custom_hourly_rate: '' });
+        // Removed custom_hourly_rate from the reset state
+        setFormData({ full_name: '', year_level: '', can_student_book: false });
         setModal({ show: false, student: null });
     };
 
@@ -408,11 +421,6 @@ export default function PeoplePage() {
                                     <p className="text-[10px] text-gray-400 font-medium leading-tight mt-1">Enable "Request Lesson" button in the student portal</p>
                                 </div>
                                 <input type="checkbox" checked={formData.can_student_book} onChange={(e) => setFormData({ ...formData, can_student_book: e.target.checked })} className="w-6 h-6 accent-[#24985b] cursor-pointer" />
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block ml-2">Custom Hourly Rate ($)</label>
-                                <input type="number" step="0.01" placeholder="Standard pricing applies if empty" value={formData.custom_hourly_rate} onChange={(e) => setFormData({ ...formData, custom_hourly_rate: e.target.value })} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-[#24985b] font-bold text-[#24985b]" />
                             </div>
                         </div>
 
