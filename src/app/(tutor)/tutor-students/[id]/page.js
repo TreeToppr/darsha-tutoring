@@ -20,6 +20,15 @@ export default function StudentProfilePage() {
     const [newFocusNotes, setNewFocusNotes] = useState('');
     const [savingFocus, setSavingFocus] = useState(false);
     const [timelineItems, setTimelineItems] = useState([]);
+    const [editingProfile, setEditingProfile] = useState(false);
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [profileForm, setProfileForm] = useState({
+        strengths: '',
+        areas_for_support: '',
+        learning_preferences: '',
+        parent_visible_summary: '',
+        tutor_private_notes: '',
+    });
 
     useEffect(() => {
         fetchStudentData();
@@ -206,6 +215,49 @@ export default function StudentProfilePage() {
         }
     }
 
+    function startEditingProfile() {
+        if (!educationalProfile) return;
+
+        setProfileForm({
+            strengths: educationalProfile.strengths || '',
+            areas_for_support: educationalProfile.areas_for_support || '',
+            learning_preferences: educationalProfile.learning_preferences || '',
+            parent_visible_summary: educationalProfile.parent_visible_summary || '',
+            tutor_private_notes: educationalProfile.tutor_private_notes || '',
+        });
+
+        setEditingProfile(true);
+    }
+
+    async function saveEducationalProfile() {
+        if (!educationalProfile) return;
+
+        setSavingProfile(true);
+
+        const { data, error } = await supabase
+            .from('student_profiles')
+            .update({
+                strengths: profileForm.strengths.trim() || null,
+                areas_for_support: profileForm.areas_for_support.trim() || null,
+                learning_preferences: profileForm.learning_preferences.trim() || null,
+                parent_visible_summary: profileForm.parent_visible_summary.trim() || null,
+                tutor_private_notes: profileForm.tutor_private_notes.trim() || null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', educationalProfile.id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Save educational profile error:', error.message || error);
+        } else {
+            setEducationalProfile(data);
+            setEditingProfile(false);
+        }
+
+        setSavingProfile(false);
+    }
+
     // 🚀 THE SKILLS RADAR: Aggregate the latest mastery level for every unique skill taught
     const getLatestSkills = () => {
         const skillMap = new Map();
@@ -287,7 +339,21 @@ export default function StudentProfilePage() {
             {activeTab === 'profile' && (
                 <div className="space-y-6 animate-in slide-in-from-bottom-2">
                     <div className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-sm">
-                        <h2 className="text-xl font-black text-gray-900 mb-6">Educational Profile</h2>
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-xl font-black text-gray-900">
+                                Educational Profile
+                            </h2>
+
+                            {!editingProfile && (
+                                <button
+                                    type="button"
+                                    onClick={startEditingProfile}
+                                    className="rounded-xl border border-[#24985b] px-4 py-2 text-xs font-black uppercase tracking-widest text-[#24985b] hover:bg-emerald-50"
+                                >
+                                    Edit Profile
+                                </button>
+                            )}
+                        </div>
 
                         {!educationalProfile ? (
                             <p className="text-gray-400 font-medium">
@@ -308,6 +374,87 @@ export default function StudentProfilePage() {
                                     onSave={addFocusItem}
                                     onComplete={completeFocusItem}
                                 />
+                                {editingProfile && (
+                                    <div className="bg-emerald-50 border border-emerald-100 rounded-[1.5rem] p-6 mb-6">
+                                        <div className="flex gap-3 justify-end mb-5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditingProfile(false)}
+                                                className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-600"
+                                            >
+                                                Cancel
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={saveEducationalProfile}
+                                                disabled={savingProfile}
+                                                className="rounded-xl bg-[#24985b] px-4 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
+                                            >
+                                                {savingProfile ? 'Saving...' : 'Save Changes'}
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-4">
+
+                                            <ProfileInput
+                                                label="Strengths"
+                                                value={profileForm.strengths}
+                                                onChange={(value) =>
+                                                    setProfileForm({
+                                                        ...profileForm,
+                                                        strengths: value,
+                                                    })
+                                                }
+                                            />
+
+                                            <ProfileInput
+                                                label="Areas For Support"
+                                                value={profileForm.areas_for_support}
+                                                onChange={(value) =>
+                                                    setProfileForm({
+                                                        ...profileForm,
+                                                        areas_for_support: value,
+                                                    })
+                                                }
+                                            />
+
+                                            <ProfileInput
+                                                label="Learning Preferences"
+                                                value={profileForm.learning_preferences}
+                                                onChange={(value) =>
+                                                    setProfileForm({
+                                                        ...profileForm,
+                                                        learning_preferences: value,
+                                                    })
+                                                }
+                                            />
+
+                                            <ProfileInput
+                                                label="Parent Summary"
+                                                value={profileForm.parent_visible_summary}
+                                                onChange={(value) =>
+                                                    setProfileForm({
+                                                        ...profileForm,
+                                                        parent_visible_summary: value,
+                                                    })
+                                                }
+                                            />
+
+                                            <ProfileInput
+                                                label="Tutor Notes"
+                                                value={profileForm.tutor_private_notes}
+                                                onChange={(value) =>
+                                                    setProfileForm({
+                                                        ...profileForm,
+                                                        tutor_private_notes: value,
+                                                    })
+                                                }
+                                            />
+
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="grid gap-5">
                                     <ProfileSection title="Strengths" value={educationalProfile.strengths} />
                                     <ProfileSection title="Areas for Support" value={educationalProfile.areas_for_support} />
@@ -563,6 +710,23 @@ function CurrentFocus({
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function ProfileInput({ label, value, onChange }) {
+    return (
+        <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">
+                {label}
+            </label>
+
+            <textarea
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                rows={3}
+                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm font-medium outline-none focus:border-[#24985b] resize-none"
+            />
         </div>
     );
 }
