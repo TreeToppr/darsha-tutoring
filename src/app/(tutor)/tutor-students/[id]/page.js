@@ -133,6 +133,23 @@ export default function StudentProfilePage() {
         setSavingFocus(false);
     }
 
+    async function completeFocusItem(itemId) {
+        const { error } = await supabase
+            .from('student_focus_items')
+            .update({
+                status: 'completed',
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', itemId);
+
+        if (error) {
+            console.error('Complete focus item error:', error.message || error);
+            return;
+        }
+
+        setFocusItems(focusItems.filter((item) => item.id !== itemId));
+    }
+
     // 🚀 THE SKILLS RADAR: Aggregate the latest mastery level for every unique skill taught
     const getLatestSkills = () => {
         const skillMap = new Map();
@@ -231,6 +248,7 @@ export default function StudentProfilePage() {
                                     setNotes={setNewFocusNotes}
                                     saving={savingFocus}
                                     onSave={addFocusItem}
+                                    onComplete={completeFocusItem}
                                 />
                                 <div className="grid gap-5">
                                     <ProfileSection title="Strengths" value={educationalProfile.strengths} />
@@ -330,7 +348,8 @@ function CurrentFocus({
     notes,
     setNotes,
     saving,
-    onSave
+    onSave,
+    onComplete
 }) {
     return (
         <div className="rounded-[1.5rem] border border-emerald-100 bg-emerald-50 p-6">
@@ -383,13 +402,23 @@ function CurrentFocus({
             ) : (
                 <div className="space-y-3">
                     {items.map((item) => (
-                        <div key={item.id} className="bg-white border border-emerald-100 rounded-2xl p-4">
-                            <p className="text-sm font-black text-gray-900">{item.title}</p>
-                            {item.notes && (
-                                <p className="text-sm font-medium text-gray-600 mt-1 leading-relaxed">
-                                    {item.notes}
-                                </p>
-                            )}
+                        <div key={item.id} className="bg-white border border-emerald-100 rounded-2xl p-4 flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-sm font-black text-gray-900">{item.title}</p>
+                                {item.notes && (
+                                    <p className="text-sm font-medium text-gray-600 mt-1 leading-relaxed">
+                                        {item.notes}
+                                    </p>
+                                )}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => onComplete(item.id)}
+                                className="shrink-0 text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-2 rounded-xl hover:bg-emerald-100 transition-colors"
+                            >
+                                Done
+                            </button>
                         </div>
                     ))}
                 </div>
