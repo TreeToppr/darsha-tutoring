@@ -10,6 +10,7 @@ export default function StudentProfilePage() {
     const [student, setStudent] = useState(null);
     const [bookings, setBookings] = useState([]);
     const [reports, setReports] = useState([]);
+    const [educationalProfile, setEducationalProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -43,6 +44,18 @@ export default function StudentProfilePage() {
             return;
         }
         setStudent(studentData);
+
+        const { data: profileData, error: profileErr } = await supabase
+            .from('student_profiles')
+            .select('*')
+            .eq('student_id', id)
+            .maybeSingle();
+
+        if (profileErr) {
+            console.error('Educational profile error:', profileErr.message || profileErr);
+        } else {
+            setEducationalProfile(profileData);
+        }
 
         // 3. Get All Bookings for THIS student with THIS tutor
         const { data: bookingData } = await supabase
@@ -142,9 +155,32 @@ export default function StudentProfilePage() {
 
             {/* TAB NAVIGATION */}
             <div className="flex gap-6 border-b border-gray-100 px-4">
+                <TabBtn label="Educational Profile" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
                 <TabBtn label="Skills & Progress" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
                 <TabBtn label="Lesson History" count={bookings.length} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
             </div>
+
+            {activeTab === 'profile' && (
+                <div className="space-y-6 animate-in slide-in-from-bottom-2">
+                    <div className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-sm">
+                        <h2 className="text-xl font-black text-gray-900 mb-6">Educational Profile</h2>
+
+                        {!educationalProfile ? (
+                            <p className="text-gray-400 font-medium">
+                                No educational profile has been created for this student yet.
+                            </p>
+                        ) : (
+                            <div className="grid gap-5">
+                                <ProfileSection title="Strengths" value={educationalProfile.strengths} />
+                                <ProfileSection title="Areas for Support" value={educationalProfile.areas_for_support} />
+                                <ProfileSection title="Learning Preferences" value={educationalProfile.learning_preferences} />
+                                <ProfileSection title="Parent-Visible Summary" value={educationalProfile.parent_visible_summary} />
+                                <ProfileSection title="Tutor Private Notes" value={educationalProfile.tutor_private_notes} privateNote />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* TAB CONTENT: SKILLS & PROGRESS */}
             {activeTab === 'overview' && (
@@ -218,6 +254,26 @@ export default function StudentProfilePage() {
 
                 </div>
             )}
+        </div>
+    );
+}
+
+function ProfileSection({ title, value, privateNote = false }) {
+    return (
+        <div className={`rounded-2xl border p-5 ${privateNote ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-100'}`}>
+            <div className="flex items-center justify-between gap-3 mb-2">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">
+                    {title}
+                </h3>
+                {privateNote && (
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-700">
+                        Tutor only
+                    </span>
+                )}
+            </div>
+            <p className="text-sm font-medium text-gray-800 leading-relaxed whitespace-pre-wrap">
+                {value || 'Not recorded yet.'}
+            </p>
         </div>
     );
 }
