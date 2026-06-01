@@ -11,6 +11,7 @@ export default function StudentProfilePage() {
     const [bookings, setBookings] = useState([]);
     const [reports, setReports] = useState([]);
     const [educationalProfile, setEducationalProfile] = useState(null);
+    const [focusItems, setFocusItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -55,6 +56,18 @@ export default function StudentProfilePage() {
             console.error('Educational profile error:', profileErr.message || profileErr);
         } else {
             setEducationalProfile(profileData);
+            const { data: focusData, error: focusErr } = await supabase
+                .from('student_focus_items')
+                .select('*')
+                .eq('student_profile_id', profileData.id)
+                .eq('status', 'active')
+                .order('sort_order', { ascending: true });
+
+            if (focusErr) {
+                console.error('Focus items error:', focusErr.message || focusErr);
+            } else {
+                setFocusItems(focusData || []);
+            }
         }
 
         // 3. Get All Bookings for THIS student with THIS tutor
@@ -170,12 +183,15 @@ export default function StudentProfilePage() {
                                 No educational profile has been created for this student yet.
                             </p>
                         ) : (
-                            <div className="grid gap-5">
-                                <ProfileSection title="Strengths" value={educationalProfile.strengths} />
-                                <ProfileSection title="Areas for Support" value={educationalProfile.areas_for_support} />
-                                <ProfileSection title="Learning Preferences" value={educationalProfile.learning_preferences} />
-                                <ProfileSection title="Parent-Visible Summary" value={educationalProfile.parent_visible_summary} />
-                                <ProfileSection title="Tutor Private Notes" value={educationalProfile.tutor_private_notes} privateNote />
+                            <div className="space-y-8">
+                                <CurrentFocus items={focusItems} />
+                                <div className="grid gap-5">
+                                    <ProfileSection title="Strengths" value={educationalProfile.strengths} />
+                                    <ProfileSection title="Areas for Support" value={educationalProfile.areas_for_support} />
+                                    <ProfileSection title="Learning Preferences" value={educationalProfile.learning_preferences} />
+                                    <ProfileSection title="Parent-Visible Summary" value={educationalProfile.parent_visible_summary} />
+                                    <ProfileSection title="Tutor Private Notes" value={educationalProfile.tutor_private_notes} privateNote />
+                                </div>
                             </div>
                         )}
                     </div>
@@ -252,6 +268,40 @@ export default function StudentProfilePage() {
                         )}
                     </div>
 
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CurrentFocus({ items }) {
+    return (
+        <div className="rounded-[1.5rem] border border-emerald-100 bg-emerald-50 p-6">
+            <div className="flex items-center justify-between gap-3 mb-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-[#24985b]">
+                    Current Focus
+                </h3>
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                    Active
+                </span>
+            </div>
+
+            {items.length === 0 ? (
+                <p className="text-sm font-medium text-emerald-900/70">
+                    No current focus items recorded yet.
+                </p>
+            ) : (
+                <div className="space-y-3">
+                    {items.map((item) => (
+                        <div key={item.id} className="bg-white border border-emerald-100 rounded-2xl p-4">
+                            <p className="text-sm font-black text-gray-900">{item.title}</p>
+                            {item.notes && (
+                                <p className="text-sm font-medium text-gray-600 mt-1 leading-relaxed">
+                                    {item.notes}
+                                </p>
+                            )}
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
