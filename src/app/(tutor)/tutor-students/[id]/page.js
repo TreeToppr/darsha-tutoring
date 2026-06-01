@@ -12,6 +12,7 @@ export default function StudentProfilePage() {
     const [reports, setReports] = useState([]);
     const [educationalProfile, setEducationalProfile] = useState(null);
     const [focusItems, setFocusItems] = useState([]);
+    const [completedFocusItems, setCompletedFocusItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('profile');
     const [showFocusForm, setShowFocusForm] = useState(false);
@@ -73,6 +74,19 @@ export default function StudentProfilePage() {
                     console.error('Focus items error:', focusErr.message || focusErr);
                 } else {
                     setFocusItems(focusData || []);
+                }
+                const { data: completedFocusData, error: completedFocusErr } = await supabase
+                    .from('student_focus_items')
+                    .select('*')
+                    .eq('student_profile_id', profileData.id)
+                    .eq('status', 'completed')
+                    .order('updated_at', { ascending: false })
+                    .limit(5);
+
+                if (completedFocusErr) {
+                    console.error('Completed focus items error:', completedFocusErr.message || completedFocusErr);
+                } else {
+                    setCompletedFocusItems(completedFocusData || []);
                 }
             }
         }
@@ -147,7 +161,20 @@ export default function StudentProfilePage() {
             return;
         }
 
+        const completedItem = focusItems.find((item) => item.id === itemId);
+
         setFocusItems(focusItems.filter((item) => item.id !== itemId));
+
+        if (completedItem) {
+            setCompletedFocusItems([
+                {
+                    ...completedItem,
+                    status: 'completed',
+                    updated_at: new Date().toISOString(),
+                },
+                ...completedFocusItems,
+            ].slice(0, 5));
+        }
     }
 
     // 🚀 THE SKILLS RADAR: Aggregate the latest mastery level for every unique skill taught
@@ -240,6 +267,7 @@ export default function StudentProfilePage() {
                             <div className="space-y-8">
                                 <CurrentFocus
                                     items={focusItems}
+                                    completedItems={completedFocusItems}
                                     showForm={showFocusForm}
                                     setShowForm={setShowFocusForm}
                                     title={newFocusTitle}
@@ -341,6 +369,7 @@ export default function StudentProfilePage() {
 
 function CurrentFocus({
     items,
+    completedItems,
     showForm,
     setShowForm,
     title,
@@ -421,6 +450,31 @@ function CurrentFocus({
                             </button>
                         </div>
                     ))}
+                </div>
+            )}
+            {completedItems.length > 0 && (
+                <div className="mt-6 pt-5 border-t border-emerald-100">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-3">
+                        Recently Completed
+                    </h4>
+
+                    <div className="space-y-2">
+                        {completedItems.map((item) => (
+                            <div key={item.id} className="flex items-start justify-between gap-3 text-sm bg-emerald-100/50 rounded-xl px-4 py-3">
+                                <div>
+                                    <p className="font-bold text-emerald-950">{item.title}</p>
+                                    {item.notes && (
+                                        <p className="text-emerald-900/70 text-xs mt-0.5">
+                                            {item.notes}
+                                        </p>
+                                    )}
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 shrink-0">
+                                    Done
+                                </span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
