@@ -1,8 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../../lib/supabaseClient';
+import { useRouter } from 'next/navigation';
 
 export default function TutorPeopleDirectory() {
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState('students');
     const [myStudents, setMyStudents] = useState([]);
     const [myParents, setMyParents] = useState([]);
@@ -176,6 +178,13 @@ export default function TutorPeopleDirectory() {
 
                                             {/* Left Column: Settings */}
                                             <div className="space-y-6">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => router.push(`/tutor-students/${student.id}`)}
+                                                    className="w-full rounded-2xl bg-[#24985b] px-5 py-4 text-xs font-black uppercase tracking-widest text-white hover:bg-[#1f7f4d] transition-colors shadow-sm"
+                                                >
+                                                    View Educational Profile
+                                                </button>
                                                 <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm relative">
                                                     <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
                                                         <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
