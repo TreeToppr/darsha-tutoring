@@ -13,7 +13,11 @@ export default function StudentProfilePage() {
     const [educationalProfile, setEducationalProfile] = useState(null);
     const [focusItems, setFocusItems] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState('profile');
+    const [showFocusForm, setShowFocusForm] = useState(false);
+    const [newFocusTitle, setNewFocusTitle] = useState('');
+    const [newFocusNotes, setNewFocusNotes] = useState('');
+    const [savingFocus, setSavingFocus] = useState(false);
 
     useEffect(() => {
         fetchStudentData();
@@ -56,17 +60,20 @@ export default function StudentProfilePage() {
             console.error('Educational profile error:', profileErr.message || profileErr);
         } else {
             setEducationalProfile(profileData);
-            const { data: focusData, error: focusErr } = await supabase
-                .from('student_focus_items')
-                .select('*')
-                .eq('student_profile_id', profileData.id)
-                .eq('status', 'active')
-                .order('sort_order', { ascending: true });
 
-            if (focusErr) {
-                console.error('Focus items error:', focusErr.message || focusErr);
-            } else {
-                setFocusItems(focusData || []);
+            if (profileData) {
+                const { data: focusData, error: focusErr } = await supabase
+                    .from('student_focus_items')
+                    .select('*')
+                    .eq('student_profile_id', profileData.id)
+                    .eq('status', 'active')
+                    .order('sort_order', { ascending: true });
+
+                if (focusErr) {
+                    console.error('Focus items error:', focusErr.message || focusErr);
+                } else {
+                    setFocusItems(focusData || []);
+                }
             }
         }
 
@@ -94,6 +101,36 @@ export default function StudentProfilePage() {
             }
         }
         setLoading(false);
+    }
+
+    async function addFocusItem() {
+        if (!educationalProfile || !newFocusTitle.trim()) return;
+
+        setSavingFocus(true);
+
+        const nextSortOrder = focusItems.length + 1;
+
+        const { data, error } = await supabase
+            .from('student_focus_items')
+            .insert({
+                student_profile_id: educationalProfile.id,
+                title: newFocusTitle.trim(),
+                notes: newFocusNotes.trim() || null,
+                sort_order: nextSortOrder,
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Add focus item error:', error.message || error);
+        } else {
+            setFocusItems([...focusItems, data]);
+            setNewFocusTitle('');
+            setNewFocusNotes('');
+            setShowFocusForm(false);
+        }
+
+        setSavingFocus(false);
     }
 
     // 🚀 THE SKILLS RADAR: Aggregate the latest mastery level for every unique skill taught
@@ -184,7 +221,17 @@ export default function StudentProfilePage() {
                             </p>
                         ) : (
                             <div className="space-y-8">
-                                <CurrentFocus items={focusItems} />
+                                <CurrentFocus
+                                    items={focusItems}
+                                    showForm={showFocusForm}
+                                    setShowForm={setShowFocusForm}
+                                    title={newFocusTitle}
+                                    setTitle={setNewFocusTitle}
+                                    notes={newFocusNotes}
+                                    setNotes={setNewFocusNotes}
+                                    saving={savingFocus}
+                                    onSave={addFocusItem}
+                                />
                                 <div className="grid gap-5">
                                     <ProfileSection title="Strengths" value={educationalProfile.strengths} />
                                     <ProfileSection title="Areas for Support" value={educationalProfile.areas_for_support} />
@@ -274,17 +321,60 @@ export default function StudentProfilePage() {
     );
 }
 
-function CurrentFocus({ items }) {
+function CurrentFocus({
+    items,
+    showForm,
+    setShowForm,
+    title,
+    setTitle,
+    notes,
+    setNotes,
+    saving,
+    onSave
+}) {
     return (
         <div className="rounded-[1.5rem] border border-emerald-100 bg-emerald-50 p-6">
             <div className="flex items-center justify-between gap-3 mb-4">
                 <h3 className="text-xs font-black uppercase tracking-widest text-[#24985b]">
                     Current Focus
                 </h3>
-                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
-                    Active
-                </span>
+
+                <button
+                    type="button"
+                    onClick={() => setShowForm(!showForm)}
+                    className="text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-white border border-emerald-100 px-3 py-2 rounded-xl hover:bg-emerald-100 transition-colors"
+                >
+                    {showForm ? 'Cancel' : '+ Add Focus'}
+                </button>
             </div>
+
+            {showForm && (
+                <div className="bg-white border border-emerald-100 rounded-2xl p-4 mb-4 space-y-3">
+                    <input
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="Focus title, e.g. Quadratic factorising"
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium outline-none focus:border-[#24985b]"
+                    />
+
+                    <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Optional notes"
+                        rows={3}
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium outline-none focus:border-[#24985b] resize-none"
+                    />
+
+                    <button
+                        type="button"
+                        onClick={onSave}
+                        disabled={saving || !title.trim()}
+                        className="w-full rounded-xl bg-[#24985b] text-white text-xs font-black uppercase tracking-widest py-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        {saving ? 'Saving...' : 'Save Focus Item'}
+                    </button>
+                </div>
+            )}
 
             {items.length === 0 ? (
                 <p className="text-sm font-medium text-emerald-900/70">
