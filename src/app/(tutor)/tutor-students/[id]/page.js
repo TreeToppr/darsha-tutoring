@@ -19,6 +19,7 @@ export default function StudentProfilePage() {
     const [newFocusTitle, setNewFocusTitle] = useState('');
     const [newFocusNotes, setNewFocusNotes] = useState('');
     const [savingFocus, setSavingFocus] = useState(false);
+    const [timelineItems, setTimelineItems] = useState([]);
 
     useEffect(() => {
         fetchStudentData();
@@ -88,6 +89,34 @@ export default function StudentProfilePage() {
                 } else {
                     setCompletedFocusItems(completedFocusData || []);
                 }
+                const activeFocusEvents = (focusData || []).map((item) => ({
+                    id: `${item.id}-added`,
+                    type: 'Focus Added',
+                    title: item.title,
+                    notes: item.notes,
+                    date: item.created_at,
+                }));
+
+                const completedFocusEvents = (completedFocusData || []).flatMap((item) => [
+                    {
+                        id: `${item.id}-added`,
+                        type: 'Focus Added',
+                        title: item.title,
+                        notes: item.notes,
+                        date: item.created_at,
+                    },
+                    {
+                        id: `${item.id}-completed`,
+                        type: 'Focus Completed',
+                        title: item.title,
+                        notes: item.notes,
+                        date: item.updated_at,
+                    },
+                ]);
+
+                setTimelineItems([...activeFocusEvents, ...completedFocusEvents].sort(
+                    (a, b) => new Date(b.date) - new Date(a.date)
+                ));
             }
         }
 
@@ -252,6 +281,7 @@ export default function StudentProfilePage() {
                 <TabBtn label="Educational Profile" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
                 <TabBtn label="Skills & Progress" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
                 <TabBtn label="Lesson History" count={bookings.length} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
+                <TabBtn label="Timeline" active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} />
             </div>
 
             {activeTab === 'profile' && (
@@ -287,6 +317,15 @@ export default function StudentProfilePage() {
                                 </div>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'timeline' && (
+                <div className="space-y-6 animate-in slide-in-from-bottom-2">
+                    <div className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-sm">
+                        <h2 className="text-xl font-black text-gray-900 mb-6">Educational Timeline</h2>
+                        <EducationalTimeline items={timelineItems} />
                     </div>
                 </div>
             )}
@@ -363,6 +402,53 @@ export default function StudentProfilePage() {
 
                 </div>
             )}
+        </div>
+    );
+}
+
+function EducationalTimeline({ items }) {
+    if (items.length === 0) {
+        return (
+            <p className="text-gray-400 font-medium">
+                No educational timeline events yet.
+            </p>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            {items.map((item) => (
+                <div key={item.id} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                        <div className="w-3 h-3 rounded-full bg-[#24985b] mt-1"></div>
+                        <div className="w-px flex-1 bg-gray-100"></div>
+                    </div>
+
+                    <div className="pb-5 flex-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                            {new Date(item.date).toLocaleDateString('en-NZ', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                            })}
+                        </p>
+
+                        <h3 className="text-sm font-black text-gray-900 mt-1">
+                            {item.type}
+                        </h3>
+
+                        <p className="text-sm font-bold text-[#24985b] mt-1">
+                            {item.title}
+                        </p>
+
+                        {item.notes && (
+                            <p className="text-sm font-medium text-gray-600 mt-1 leading-relaxed">
+                                {item.notes}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }
