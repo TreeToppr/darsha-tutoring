@@ -18,6 +18,8 @@ function UploadContent() {
     // File States
     const [audioFiles, setAudioFiles] = useState([]);
     const [screenshots, setScreenshots] = useState([]);
+    // 🚀 NEW: State for Transcription Videos
+    const [videoFiles, setVideoFiles] = useState([]); 
     const [notes, setNotes] = useState("");
 
     const [isUploading, setIsUploading] = useState(false);
@@ -66,15 +68,18 @@ function UploadContent() {
         fetchFilteredBookings();
     }, [selectedStudentId, selectedTerm]);
 
+    // 🚀 FIXED: Added 'video' support to handlers
     const handleFileChange = (e, type) => {
         const selectedFiles = Array.from(e.target.files);
         if (type === 'audio') setAudioFiles(prev => [...prev, ...selectedFiles]);
         if (type === 'image') setScreenshots(prev => [...prev, ...selectedFiles]);
+        if (type === 'video') setVideoFiles(prev => [...prev, ...selectedFiles]); 
     };
 
     const removeFile = (index, type) => {
         if (type === 'audio') setAudioFiles(prev => prev.filter((_, i) => i !== index));
         if (type === 'image') setScreenshots(prev => prev.filter((_, i) => i !== index));
+        if (type === 'video') setVideoFiles(prev => prev.filter((_, i) => i !== index)); 
     };
 
     const handleUploadAndSave = async () => {
@@ -92,7 +97,7 @@ function UploadContent() {
                 screenshotUrls.push(supabase.storage.from('lesson-media').getPublicUrl(path).data.publicUrl);
             }
 
-            // 2. Upload Audio
+            // 2. Upload Audio (Standard)
             const audioUrls = [];
             for (const [i, file] of audioFiles.entries()) {
                 setUploadProgress(`Uploading audio ${i + 1}...`);
@@ -102,7 +107,24 @@ function UploadContent() {
                 audioUrls.push(supabase.storage.from('lesson-media').getPublicUrl(path).data.publicUrl);
             }
 
-            // 3. Save Record
+            // 🚀 NEW: 3. Upload Videos and Create Transcription Job
+            for (const [i, file] of videoFiles.entries()) {
+                setUploadProgress(`Uploading video ${i + 1} to transcription queue...`);
+                // Use the private bucket
+                const path = `${selectedBookingId}/video_${Date.now()}_${i}.${file.name.split('.').pop()}`;
+                const { error: uploadError } = await supabase.storage.from('lesson-recordings').upload(path, file);
+                if (uploadError) throw uploadError;
+
+                // Create the pending transcription job for the local worker
+                const { error: dbError } = await supabase.from('transcriptions').insert({
+                    booking_id: selectedBookingId,
+                    file_path: path,
+                    status: 'pending'
+                });
+                if (dbError) throw dbError;
+            }
+
+            // 4. Save Record
             setUploadProgress("Saving report...");
             const { data: newReport, error: insertError } = await supabase.from('lesson_reports').insert({
                 booking_id: selectedBookingId,
@@ -122,7 +144,7 @@ function UploadContent() {
                 body: JSON.stringify({ reportId: newReport.id })
             });
 
-            setMessage({ text: "Success! Report created.", type: 'success' });
+            setMessage({ text: "Success! Report & Transcriptions Queued.", type: 'success' });
             setTimeout(() => {
                 if (autoBookingId) {
                     router.push(`/bookings/${autoBookingId}`);
@@ -142,7 +164,7 @@ function UploadContent() {
         <div className="max-w-3xl mx-auto p-6 space-y-8 pb-32">
             <div>
                 <h1 className="text-3xl font-black text-gray-900">Lesson Wrap-up</h1>
-                <p className="text-gray-500">Document progress and upload recordings.</p>
+                <p className="text-gray-500">Document progress and queue videos for transcription.</p>
             </div>
 
             <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-sm space-y-8">
@@ -212,7 +234,7 @@ function UploadContent() {
 
                 {/* 🎙️ Audio */}
                 <div className="space-y-4">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">5. Voice Recordings</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">5. Short Voice Recordings</label>
                     <div className="space-y-2">
                         {audioFiles.map((f, i) => (
                             <div key={i} className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-100">
@@ -229,15 +251,41 @@ function UploadContent() {
                         ))}
                         <label className="w-full p-4 border-2 border-dashed border-gray-200 rounded-2xl flex items-center justify-center gap-3 cursor-pointer hover:border-[#24985b] hover:bg-emerald-50 transition-all text-gray-400 hover:text-[#24985b]">
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                            <span className="text-sm font-bold">Add Audio Recording</span>
+                            <span className="text-sm font-bold">Add Audio Clip</span>
                             <input type="file" multiple accept="audio/*" className="hidden" onChange={(e) => handleFileChange(e, 'audio')} />
+                        </label>
+                    </div>
+                </div>
+
+                {/* 🎥 🚀 NEW: Video Transcription Block */}
+                <div className="pt-6 border-t border-gray-100 space-y-4">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">6. Lesson Video (For AI Transcription)</label>
+                    <p className="text-xs text-gray-500 font-medium">Recordings added here are sent to your local worker. They are hidden from the public.</p>
+                    <div className="space-y-2">
+                        {videoFiles.map((f, i) => (
+                            <div key={i} className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center">
+                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                                    </div>
+                                    <span className="text-sm font-bold text-purple-700 truncate max-w-[200px]">{f.name}</span>
+                                </div>
+                                <button onClick={() => removeFile(i, 'video')} className="text-purple-400 hover:text-red-500">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                            </div>
+                        ))}
+                        <label className="w-full p-4 border-2 border-dashed border-gray-200 rounded-2xl flex items-center justify-center gap-3 cursor-pointer hover:border-[#24985b] hover:bg-emerald-50 transition-all text-gray-400 hover:text-[#24985b]">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                            <span className="text-sm font-bold">Add Google Meet Video</span>
+                            <input type="file" multiple accept="video/*,audio/*" className="hidden" onChange={(e) => handleFileChange(e, 'video')} />
                         </label>
                     </div>
                 </div>
 
                 {/* 📝 Tutor Notes / Zoom Summary */}
                 <div className="pt-6 border-t border-gray-100 space-y-4">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">6. Lesson Notes / Zoom Summary</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">7. Lesson Notes / Zoom Summary</label>
                     <textarea
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
