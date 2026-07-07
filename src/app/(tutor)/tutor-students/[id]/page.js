@@ -9,11 +9,17 @@ export default function StudentProfilePage() {
     const router = useRouter();
 
     const [student, setStudent] = useState(null);
+    const [studentProfile, setStudentProfile] = useState(null);
     const [parentProfile, setParentProfile] = useState(null);
     const [bookings, setBookings] = useState([]);
     const [reports, setReports] = useState([]);
+    const [focusItems, setFocusItems] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [savingFocus, setSavingFocus] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
+
+    const [newFocusTitle, setNewFocusTitle] = useState('');
+    const [newFocusNotes, setNewFocusNotes] = useState('');
 
     useEffect(() => {
         fetchStudentData();
@@ -69,6 +75,35 @@ export default function StudentProfilePage() {
             setParentProfile(parentData || null);
         }
 
+        const { data: profileData, error: profileErr } = await supabase
+            .from('student_profiles')
+            .select('*')
+            .eq('student_id', id)
+            .maybeSingle();
+
+        if (profileErr) {
+            console.error('Student profile could not be loaded:', profileErr);
+        }
+
+        setStudentProfile(profileData || null);
+
+        if (profileData?.id) {
+            const { data: focusData, error: focusErr } = await supabase
+                .from('student_focus_items')
+                .select('*')
+                .eq('student_profile_id', profileData.id)
+                .order('sort_order', { ascending: true })
+                .order('created_at', { ascending: false });
+
+            if (focusErr) {
+                console.error('Focus items could not be loaded:', focusErr);
+            }
+
+            setFocusItems(focusData || []);
+        } else {
+            setFocusItems([]);
+        }
+
         const { data: bookingData, error: bookingErr } = await supabase
             .from('bookings')
             .select('*')
@@ -105,6 +140,66 @@ export default function StudentProfilePage() {
         }
 
         setLoading(false);
+    }
+
+    async function addFocusItem(event) {
+        event.preventDefault();
+
+        if (!studentProfile?.id) {
+            alert('This student does not have an educational profile yet.');
+            return;
+        }
+
+        const title = newFocusTitle.trim();
+        const notes = newFocusNotes.trim();
+
+        if (!title) return;
+
+        setSavingFocus(true);
+
+        const { error } = await supabase
+            .from('student_focus_items')
+            .insert({
+                student_profile_id: studentProfile.id,
+                title,
+                notes: notes || null,
+                status: 'active',
+                sort_order: focusItems.length
+            });
+
+        if (error) {
+            console.error('Focus item could not be created:', error);
+            alert('Could not add focus item. Check the console for details.');
+            setSavingFocus(false);
+            return;
+        }
+
+        setNewFocusTitle('');
+        setNewFocusNotes('');
+        await fetchStudentData();
+        setSavingFocus(false);
+    }
+
+    async function updateFocusStatus(focusItemId, status) {
+        const { error } = await supabase
+            .from('student_focus_items')
+            .update({
+                status,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', focusItemId);
+
+        if (error) {
+            console.error('Focus item could not be updated:', error);
+            alert('Could not update focus item. Check the console for details.');
+            return;
+        }
+
+        setFocusItems(current =>
+            current.map(item =>
+                item.id === focusItemId ? { ...item, status } : item
+            )
+        );
     }
 
     const getLatestSkills = () => {
@@ -160,7 +255,6 @@ export default function StudentProfilePage() {
     }
 
     const latestSkills = getLatestSkills();
-
     const activeBookings = bookings.filter(b => b.status !== 'cancelled');
 
     const upcomingBookings = activeBookings
@@ -176,6 +270,7 @@ export default function StudentProfilePage() {
     const latestReport = reports[0] || null;
     const lastLesson = pastBookings[0] || null;
     const nextLesson = upcomingBookings[0] || null;
+    const activeFocusItems = focusItems.filter(item => item.status !== 'archived');
 
     const averageMastery = latestSkills.length > 0
         ? (latestSkills.reduce((sum, s) => sum + s.level, 0) / latestSkills.length).toFixed(1)
@@ -236,7 +331,7 @@ export default function StudentProfilePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <SnapshotCard
                     label="Year Level"
-                    value={student.year_level || 'Not set'}
+                    value={student.year_level || studentProfile?.year_label || 'Not set'}
                     detail="Student school year"
                 />
                 <SnapshotCard
@@ -260,9 +355,9 @@ export default function StudentProfilePage() {
                     detail="Future non-cancelled lessons"
                 />
                 <SnapshotCard
-                    label="Last Lesson"
-                    value={lastLesson ? formatDate(lastLesson.session_date) : 'No past lesson'}
-                    detail={lastLesson ? `${lastLesson.subject || 'Lesson'} at ${formatTime(lastLesson.start_time)}` : 'No completed lesson yet'}
+                    label="Learning Focus"
+                    value={activeFocusItems.length}
+                    detail="Active and completed focus items"
                 />
             </div>
 
@@ -274,7 +369,7 @@ export default function StudentProfilePage() {
                     </p>
                     <p className="text-blue-950 font-bold text-base leading-relaxed">
                         {latestReport?.next_lesson_suggestions ||
-                            'No learning focus has been recorded yet. Upload a lesson report to start building the student’s learning history.'}
+                            'No learning focus has been recorded from a lesson report yet. Add a focus item below to start building the student’s learning history.'}
                     </p>
                 </div>
 
@@ -288,6 +383,74 @@ export default function StudentProfilePage() {
                     </p>
                 </div>
             </div>
+
+            {/* LEARNING FOCUS ITEMS */}
+            <section className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-sm space-y-6">
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div>
+                        <p className="text-[10px] font-black text-[#24985b] uppercase tracking-widest mb-2">
+                            Educational Continuity
+                        </p>
+                        <h2 className="text-2xl font-black text-gray-900">Learning Focus</h2>
+                        <p className="text-sm font-bold text-gray-400 mt-2">
+                            Track goals, watch points, and recurring learning needs for this student.
+                        </p>
+                    </div>
+
+                    {!studentProfile && (
+                        <div className="bg-yellow-50 border border-yellow-100 rounded-2xl px-4 py-3 text-sm font-bold text-yellow-800">
+                            No linked student profile yet.
+                        </div>
+                    )}
+                </div>
+
+                {studentProfile && (
+                    <form onSubmit={addFocusItem} className="bg-gray-50 border border-gray-100 rounded-[1.5rem] p-5 space-y-3">
+                        <input
+                            value={newFocusTitle}
+                            onChange={event => setNewFocusTitle(event.target.value)}
+                            placeholder="Add a focus item, e.g. Fractions confidence, algebra basics, exam anxiety..."
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-900 outline-none focus:border-[#24985b]"
+                        />
+
+                        <textarea
+                            value={newFocusNotes}
+                            onChange={event => setNewFocusNotes(event.target.value)}
+                            placeholder="Optional notes for the tutor..."
+                            rows={3}
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 outline-none focus:border-[#24985b]"
+                        />
+
+                        <div className="flex justify-end">
+                            <button
+                                type="submit"
+                                disabled={savingFocus || !newFocusTitle.trim()}
+                                className="rounded-2xl bg-[#24985b] px-5 py-3 text-sm font-black text-white hover:bg-[#1f7f4d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {savingFocus ? 'Adding...' : 'Add Focus Item'}
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {activeFocusItems.length === 0 ? (
+                    <div className="text-center py-10 bg-gray-50 border border-dashed border-gray-200 rounded-[1.5rem]">
+                        <p className="text-sm font-bold text-gray-400">
+                            No focus items yet. Add the first one after reviewing this student’s lessons.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {activeFocusItems.map(item => (
+                            <FocusItemCard
+                                key={item.id}
+                                item={item}
+                                onStatusChange={updateFocusStatus}
+                            />
+                        ))}
+                    </div>
+                )}
+            </section>
 
             {/* TAB NAVIGATION */}
             <div className="flex gap-6 border-b border-gray-100 px-4 overflow-x-auto">
@@ -403,6 +566,68 @@ function SnapshotCard({ label, value, detail }) {
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{label}</p>
             <p className="text-xl font-black text-gray-900 truncate">{value}</p>
             <p className="text-xs font-bold text-gray-400 mt-2 truncate">{detail}</p>
+        </div>
+    );
+}
+
+function FocusItemCard({ item, onStatusChange }) {
+    const isCompleted = item.status === 'completed';
+
+    return (
+        <div className="border border-gray-100 rounded-[1.5rem] p-5 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${isCompleted
+                            ? 'bg-emerald-100 text-[#24985b]'
+                            : 'bg-blue-50 text-blue-600'
+                        }`}>
+                        {item.status}
+                    </span>
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">
+                        {formatDate(item.created_at)}
+                    </p>
+                </div>
+
+                <h3 className={`text-base font-black ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                    {item.title}
+                </h3>
+
+                {item.notes && (
+                    <p className="text-sm font-medium text-gray-500 mt-2 leading-relaxed">
+                        {item.notes}
+                    </p>
+                )}
+            </div>
+
+            <div className="flex gap-2 shrink-0">
+                {item.status !== 'active' && (
+                    <button
+                        type="button"
+                        onClick={() => onStatusChange(item.id, 'active')}
+                        className="rounded-xl bg-gray-100 px-3 py-2 text-[10px] font-black text-gray-600 hover:bg-gray-200"
+                    >
+                        Active
+                    </button>
+                )}
+
+                {item.status !== 'completed' && (
+                    <button
+                        type="button"
+                        onClick={() => onStatusChange(item.id, 'completed')}
+                        className="rounded-xl bg-emerald-100 px-3 py-2 text-[10px] font-black text-[#24985b] hover:bg-emerald-200"
+                    >
+                        Complete
+                    </button>
+                )}
+
+                <button
+                    type="button"
+                    onClick={() => onStatusChange(item.id, 'archived')}
+                    className="rounded-xl bg-gray-100 px-3 py-2 text-[10px] font-black text-gray-500 hover:bg-gray-200"
+                >
+                    Archive
+                </button>
+            </div>
         </div>
     );
 }
