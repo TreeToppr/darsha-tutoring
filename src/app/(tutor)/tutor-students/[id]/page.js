@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../../lib/supabaseClient';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 
 export default function StudentProfilePage() {
@@ -19,7 +18,11 @@ export default function StudentProfilePage() {
 
     async function fetchStudentData() {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+
+        if (!user) {
+            setLoading(false);
+            return;
+        }
 
         // 1. Get Tutor ID
         const { data: tutorRecord } = await supabase
@@ -28,7 +31,10 @@ export default function StudentProfilePage() {
             .eq('profile_id', user.id)
             .single();
 
-        if (!tutorRecord) return;
+        if (!tutorRecord) {
+            setLoading(false);
+            return;
+        }
 
         // 2. Get Student Details
         const { data: studentData, error: studentErr } = await supabase
@@ -152,7 +158,7 @@ export default function StudentProfilePage() {
                     <div className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-sm">
                         <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
                             <svg className="w-6 h-6 text-[#24985b]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                            Current Math Mastery
+                            Current Skill Mastery
                         </h2>
 
                         {latestSkills.length === 0 ? (
