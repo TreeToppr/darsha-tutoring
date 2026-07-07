@@ -16,10 +16,22 @@ export default function StudentProfilePage() {
     const [focusItems, setFocusItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [savingFocus, setSavingFocus] = useState(false);
+    const [savingProfile, setSavingProfile] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
 
     const [newFocusTitle, setNewFocusTitle] = useState('');
     const [newFocusNotes, setNewFocusNotes] = useState('');
+
+    const [profileForm, setProfileForm] = useState({
+        school_name: '',
+        lesson_frequency: '',
+        lesson_duration_minutes: '',
+        strengths: '',
+        areas_for_support: '',
+        learning_preferences: '',
+        parent_visible_summary: '',
+        tutor_private_notes: ''
+    });
 
     useEffect(() => {
         fetchStudentData();
@@ -86,6 +98,19 @@ export default function StudentProfilePage() {
         }
 
         setStudentProfile(profileData || null);
+
+        if (profileData) {
+            setProfileForm({
+                school_name: profileData.school_name || '',
+                lesson_frequency: profileData.lesson_frequency || '',
+                lesson_duration_minutes: profileData.lesson_duration_minutes || '',
+                strengths: profileData.strengths || '',
+                areas_for_support: profileData.areas_for_support || '',
+                learning_preferences: profileData.learning_preferences || '',
+                parent_visible_summary: profileData.parent_visible_summary || '',
+                tutor_private_notes: profileData.tutor_private_notes || ''
+            });
+        }
 
         if (profileData?.id) {
             const { data: focusData, error: focusErr } = await supabase
@@ -200,6 +225,50 @@ export default function StudentProfilePage() {
                 item.id === focusItemId ? { ...item, status } : item
             )
         );
+    }
+
+    async function saveProfileSummary(event) {
+        event.preventDefault();
+
+        if (!studentProfile?.id) {
+            alert('This student does not have an educational profile yet.');
+            return;
+        }
+
+        setSavingProfile(true);
+
+        const durationValue = profileForm.lesson_duration_minutes
+            ? Number(profileForm.lesson_duration_minutes)
+            : null;
+
+        const { data, error } = await supabase
+            .from('student_profiles')
+            .update({
+                school_name: profileForm.school_name.trim() || null,
+                lesson_frequency: profileForm.lesson_frequency.trim() || null,
+                lesson_duration_minutes: Number.isFinite(durationValue) && durationValue > 0 ? durationValue : null,
+                strengths: profileForm.strengths.trim() || null,
+                areas_for_support: profileForm.areas_for_support.trim() || null,
+                learning_preferences: profileForm.learning_preferences.trim() || null,
+                parent_visible_summary: profileForm.parent_visible_summary.trim() || null,
+                tutor_private_notes: profileForm.tutor_private_notes.trim() || null,
+                profile_status: 'active',
+                last_reviewed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', studentProfile.id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Student profile could not be updated:', error);
+            alert('Could not save student profile summary. Check the console for details.');
+            setSavingProfile(false);
+            return;
+        }
+
+        setStudentProfile(data);
+        setSavingProfile(false);
     }
 
     const getLatestSkills = () => {
@@ -384,6 +453,107 @@ export default function StudentProfilePage() {
                 </div>
             </div>
 
+            {/* EDUCATIONAL PROFILE SUMMARY */}
+            <section className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-sm space-y-6">
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div>
+                        <p className="text-[10px] font-black text-[#24985b] uppercase tracking-widest mb-2">
+                            Student Profile
+                        </p>
+                        <h2 className="text-2xl font-black text-gray-900">Educational Summary</h2>
+                        <p className="text-sm font-bold text-gray-400 mt-2">
+                            Keep the student’s learning context in one place so future lessons start faster.
+                        </p>
+                    </div>
+
+                    {studentProfile?.last_reviewed_at && (
+                        <div className="bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-xs font-bold text-gray-500">
+                            Last reviewed: {formatDate(studentProfile.last_reviewed_at)}
+                        </div>
+                    )}
+                </div>
+
+                {!studentProfile ? (
+                    <div className="bg-yellow-50 border border-yellow-100 rounded-2xl p-5">
+                        <p className="text-sm font-bold text-yellow-800">
+                            No linked educational profile exists for this student yet.
+                        </p>
+                        <p className="text-xs font-medium text-yellow-700 mt-2">
+                            A follow-up task should create missing student profile records automatically.
+                        </p>
+                    </div>
+                ) : (
+                    <form onSubmit={saveProfileSummary} className="space-y-5">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <ProfileInput
+                                label="School"
+                                value={profileForm.school_name}
+                                onChange={value => setProfileForm(current => ({ ...current, school_name: value }))}
+                                placeholder="School name"
+                            />
+                            <ProfileInput
+                                label="Lesson Frequency"
+                                value={profileForm.lesson_frequency}
+                                onChange={value => setProfileForm(current => ({ ...current, lesson_frequency: value }))}
+                                placeholder="Weekly, fortnightly..."
+                            />
+                            <ProfileInput
+                                label="Lesson Duration"
+                                value={profileForm.lesson_duration_minutes}
+                                onChange={value => setProfileForm(current => ({ ...current, lesson_duration_minutes: value }))}
+                                placeholder="60"
+                                type="number"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <ProfileTextarea
+                                label="Strengths"
+                                value={profileForm.strengths}
+                                onChange={value => setProfileForm(current => ({ ...current, strengths: value }))}
+                                placeholder="What does this student already do well?"
+                            />
+                            <ProfileTextarea
+                                label="Areas for Support"
+                                value={profileForm.areas_for_support}
+                                onChange={value => setProfileForm(current => ({ ...current, areas_for_support: value }))}
+                                placeholder="Where does this student need support?"
+                            />
+                            <ProfileTextarea
+                                label="Learning Preferences"
+                                value={profileForm.learning_preferences}
+                                onChange={value => setProfileForm(current => ({ ...current, learning_preferences: value }))}
+                                placeholder="How does this student learn best?"
+                            />
+                            <ProfileTextarea
+                                label="Tutor Private Notes"
+                                value={profileForm.tutor_private_notes}
+                                onChange={value => setProfileForm(current => ({ ...current, tutor_private_notes: value }))}
+                                placeholder="Private tutor notes. Keep this professional."
+                            />
+                        </div>
+
+                        <ProfileTextarea
+                            label="Parent-visible Summary"
+                            value={profileForm.parent_visible_summary}
+                            onChange={value => setProfileForm(current => ({ ...current, parent_visible_summary: value }))}
+                            placeholder="A parent-friendly summary of the student's learning context."
+                            rows={4}
+                        />
+
+                        <div className="flex justify-end">
+                            <button
+                                type="submit"
+                                disabled={savingProfile}
+                                className="rounded-2xl bg-[#24985b] px-5 py-3 text-sm font-black text-white hover:bg-[#1f7f4d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {savingProfile ? 'Saving...' : 'Save Educational Summary'}
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </section>
+
             {/* LEARNING FOCUS ITEMS */}
             <section className="bg-white border border-gray-100 rounded-[2rem] p-8 shadow-sm space-y-6">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
@@ -498,8 +668,8 @@ export default function StudentProfilePage() {
                                                 <div
                                                     key={level}
                                                     className={`flex-1 rounded-full transition-all duration-500 ${level <= skill.level
-                                                            ? 'bg-[#24985b] shadow-sm scale-y-100'
-                                                            : 'bg-gray-100 scale-y-75 group-hover:scale-y-100'
+                                                        ? 'bg-[#24985b] shadow-sm scale-y-100'
+                                                        : 'bg-gray-100 scale-y-75 group-hover:scale-y-100'
                                                         }`}
                                                 ></div>
                                             ))}
@@ -570,6 +740,40 @@ function SnapshotCard({ label, value, detail }) {
     );
 }
 
+function ProfileInput({ label, value, onChange, placeholder, type = 'text' }) {
+    return (
+        <label className="block">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
+                {label}
+            </span>
+            <input
+                type={type}
+                value={value}
+                onChange={event => onChange(event.target.value)}
+                placeholder={placeholder}
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-900 outline-none focus:border-[#24985b]"
+            />
+        </label>
+    );
+}
+
+function ProfileTextarea({ label, value, onChange, placeholder, rows = 3 }) {
+    return (
+        <label className="block">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
+                {label}
+            </span>
+            <textarea
+                value={value}
+                onChange={event => onChange(event.target.value)}
+                placeholder={placeholder}
+                rows={rows}
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 outline-none focus:border-[#24985b]"
+            />
+        </label>
+    );
+}
+
 function FocusItemCard({ item, onStatusChange }) {
     const isCompleted = item.status === 'completed';
 
@@ -578,8 +782,8 @@ function FocusItemCard({ item, onStatusChange }) {
             <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-2">
                     <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${isCompleted
-                            ? 'bg-emerald-100 text-[#24985b]'
-                            : 'bg-blue-50 text-blue-600'
+                        ? 'bg-emerald-100 text-[#24985b]'
+                        : 'bg-blue-50 text-blue-600'
                         }`}>
                         {item.status}
                     </span>
@@ -637,8 +841,8 @@ function TabBtn({ label, active, onClick, count }) {
         <button
             onClick={onClick}
             className={`pb-4 text-sm font-black transition-all flex items-center gap-2 whitespace-nowrap ${active
-                    ? 'text-gray-900 border-b-4 border-[#24985b]'
-                    : 'text-gray-400 hover:text-gray-600'
+                ? 'text-gray-900 border-b-4 border-[#24985b]'
+                : 'text-gray-400 hover:text-gray-600'
                 }`}
         >
             {label}
