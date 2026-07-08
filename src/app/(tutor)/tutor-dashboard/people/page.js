@@ -8,6 +8,7 @@ export default function TutorPeopleDirectory() {
     const [myStudents, setMyStudents] = useState([]);
     const [myParents, setMyParents] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [currentTutor, setCurrentTutor] = useState(null);
 
     const [expandedStudentId, setExpandedStudentId] = useState(null);
     const [expandedParentId, setExpandedParentId] = useState(null);
@@ -35,6 +36,8 @@ export default function TutorPeopleDirectory() {
             return;
         }
 
+        setCurrentTutor(tutorRecord);
+
         // 🚀 FIX 2: Now fetch bookings using the correct tutorRecord.id
         const { data: bookings } = await supabase
             .from('bookings')
@@ -55,14 +58,33 @@ export default function TutorPeopleDirectory() {
         const { data: students } = await supabase.from('students').select('*').in('id', studentIds);
         const { data: parents } = await supabase.from('profiles').select('*').in('id', parentIds);
 
+        const { data: tutorStudentSettings, error: settingsError } = await supabase
+            .from('tutor_student_settings')
+            .select('*')
+            .eq('tutor_id', tutorRecord.id)
+            .in('student_id', studentIds);
+
+        if (settingsError) {
+            console.error("Could not load tutor student settings:", settingsError);
+        }
+
         // 5. Enrich Students with their specific financial/lesson stats for THIS tutor
         const enrichedStudents = (students || []).map(student => {
             const studentBookings = bookings.filter(b => b.student_id === student.id);
             const totalPaid = studentBookings.filter(b => b.payment_status === 'paid').reduce((sum, b) => sum + b.amount_total, 0);
             const totalOwed = studentBookings.filter(b => b.payment_status === 'unpaid').reduce((sum, b) => sum + b.amount_total, 0);
             const parentInfo = parents?.find(p => p.id === student.parent_id);
+            const tutorStudentSetting = tutorStudentSettings?.find(setting => setting.student_id === student.id);
 
-            return { ...student, studentBookings, totalPaid, totalOwed, parentInfo };
+            return {
+                ...student,
+                studentBookings,
+                totalPaid,
+                totalOwed,
+                parentInfo,
+                tutorStudentSetting,
+                tutor_custom_hourly_rate: tutorStudentSetting?.custom_hourly_rate ?? null
+            };
         }).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
 
         // 6. Enrich Parents with their specific financial stats for THIS tutor
@@ -83,19 +105,55 @@ export default function TutorPeopleDirectory() {
 
     // --- CUSTOM RATE SAVER ---
     const handleUpdateRate = async (studentId, newRateStr) => {
-        // Allow empty string to reset back to null/default, otherwise parse the float
+        if (!currentTutor?.id) {
+            alert("Tutor record not loaded yet. Please refresh and try again.");
+            return;
+        }
+
         const parsedRate = newRateStr === '' ? null : parseFloat(newRateStr);
+
+        if (newRateStr !== '' && (!Number.isFinite(parsedRate) || parsedRate <= 0)) {
+            alert("Please enter a valid hourly rate greater than 0, or leave it blank to use your default rate.");
+            return;
+        }
 
         setSavingRateId(studentId);
 
-        const { error } = await supabase
-            .from('students')
-            .update({ custom_hourly_rate: parsedRate })
-            .eq('id', studentId);
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+            alert("You need to be signed in to update rates.");
+            setSavingRateId(null);
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('tutor_student_settings')
+            .upsert(
+                {
+                    tutor_id: currentTutor.id,
+                    student_id: studentId,
+                    custom_hourly_rate: parsedRate,
+                    created_by: user.id,
+                    updated_at: new Date().toISOString()
+                },
+                { onConflict: 'tutor_id,student_id' }
+            )
+            .select()
+            .single();
 
         if (!error) {
-            setMyStudents(myStudents.map(s => s.id === studentId ? { ...s, custom_hourly_rate: parsedRate } : s));
+            setMyStudents(myStudents.map(s =>
+                s.id === studentId
+                    ? {
+                        ...s,
+                        tutorStudentSetting: data,
+                        tutor_custom_hourly_rate: data?.custom_hourly_rate ?? null
+                    }
+                    : s
+            ));
         } else {
+            console.error("Error saving tutor-specific rate:", error);
             alert("Error saving rate: " + error.message);
         }
 
@@ -153,7 +211,7 @@ export default function TutorPeopleDirectory() {
                                         <div>
                                             <h3 className="text-xl font-black text-gray-900">
                                                 {student.full_name}
-                                                {student.custom_hourly_rate && (
+                                                {student.tutor_custom_hourly_rate && (
                                                     <span className="ml-3 bg-blue-100 text-blue-700 text-[10px] uppercase tracking-widest px-2 py-1 rounded-md font-bold">Custom Rate</span>
                                                 )}
                                             </h3>
@@ -188,7 +246,9 @@ export default function TutorPeopleDirectory() {
                                                         <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                                         Custom Hourly Rate
                                                     </h4>
-                                                    <p className="text-xs text-gray-500 mb-4 font-medium">Override your default rate for this specific student.</p>
+                                                    <p className="text-xs text-gray-500 mb-4 font-medium">
+                                                        Override your own default rate for this student. Other tutors can set their own rate separately.
+                                                    </p>
 
                                                     <div className="relative">
                                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -197,12 +257,14 @@ export default function TutorPeopleDirectory() {
                                                         <input
                                                             type="number"
                                                             placeholder="Default"
-                                                            defaultValue={student.custom_hourly_rate || ''}
+                                                            defaultValue={student.tutor_custom_hourly_rate || ''}
                                                             onBlur={(e) => handleUpdateRate(student.id, e.target.value)}
                                                             className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-8 pr-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                                                         />
                                                     </div>
-                                                    <p className="text-[10px] text-gray-400 mt-2 font-medium">Leave blank to use your standard profile rate.</p>
+                                                    <p className="text-[10px] text-gray-400 mt-2 font-medium">
+                                                        Leave blank to use your standard tutor rate.
+                                                    </p>
 
                                                     {savingRateId === student.id && (
                                                         <div className="absolute top-4 right-4 bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-md animate-pulse">Saving...</div>
